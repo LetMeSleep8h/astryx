@@ -18,6 +18,7 @@ import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Icon} from '@astryxdesign/core/Icon';
 import {SharedTopNav} from './SharedTopNav';
+import {DEPRECATED_LABEL} from './Deprecation';
 import {DocsBanner} from './InternalDocsPrompt';
 import type {PackageMeta} from '../generated/packageRegistry';
 import type {DocTopic} from '../generated/docsRegistry';
@@ -50,6 +51,14 @@ function CanaryCategoryMarker() {
     </span>
   );
 }
+
+// A deprecated entry reads quietly: crossed out in the muted text color, which
+// says "deprecated" rather than "disabled". Strikethrough is not announced, so
+// the link's accessible name says it too.
+const deprecatedEntryStyle = {
+  textDecorationLine: 'line-through',
+  color: 'var(--color-text-secondary)',
+} as const;
 
 /** Foundations: tokens first, then alphabetical */
 const foundationsSort = (a: DocTopic, b: DocTopic) => {
@@ -151,15 +160,25 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
     />
   );
 
+  const renderComponentEntry = (entry: ComponentSidebarEntry) => (
+    <SideNavItem
+      key={`${entry.packageName}:${entry.name}`}
+      label={entry.displayName}
+      href={entry.href}
+      isSelected={pathname === entry.href}
+      aria-label={
+        entry.isDeprecated
+          ? `${entry.displayName}, ${DEPRECATED_LABEL.toLowerCase()}`
+          : undefined
+      }
+      style={entry.isDeprecated ? deprecatedEntryStyle : undefined}
+    />
+  );
+
   const renderComponentItems = (items: ComponentSidebarItem[]) =>
     items.map(item =>
       item.type === 'entry' ? (
-        <SideNavItem
-          key={`${item.packageName}:${item.name}`}
-          label={item.displayName}
-          href={item.href}
-          isSelected={pathname === item.href}
-        />
+        renderComponentEntry(item)
       ) : (
         <SideNavItem
           key={`${item.packageName}:${item.label}`}
@@ -167,14 +186,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
           collapsible={{
             defaultIsCollapsed: !item.entries.some(e => pathname === e.href),
           }}>
-          {item.entries.map(entry => (
-            <SideNavItem
-              key={`${entry.packageName}:${entry.name}`}
-              label={entry.displayName}
-              href={entry.href}
-              isSelected={pathname === entry.href}
-            />
-          ))}
+          {item.entries.map(renderComponentEntry)}
         </SideNavItem>
       ),
     );
@@ -296,14 +308,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                   />
                 )}
                 {q
-                  ? flatSearchResults.map(item => (
-                      <SideNavItem
-                        key={`${item.packageName}:${item.name}`}
-                        label={item.displayName}
-                        href={item.href}
-                        isSelected={pathname === item.href}
-                      />
-                    ))
+                  ? flatSearchResults.map(renderComponentEntry)
                   : renderComponentItems(componentItems)}
                 {/* Utilities — secondary list rendered below the main Components
                     section. Always starts collapsed; users can expand on demand. */}
