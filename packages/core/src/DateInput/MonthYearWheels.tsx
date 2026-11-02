@@ -4,8 +4,10 @@
 
 /**
  * @file MonthYearWheels.tsx
- * @input A month index, the reachable month bounds, a change callback
- * @output Exports MonthYearWheels — the month + year wheel pair
+ * @input A calendar's month model, a month index, the reachable month bounds,
+ *   a change callback
+ * @output Exports MonthYearWheels — the month wheel of a calendar year and the
+ *   year wheel with era labels
  * @position Internal component; consumed by TouchDateField.tsx
  *
  * The shortcut out of continuous scrolling. Scrolling is the right gesture for
@@ -24,12 +26,15 @@
 
 import {useMemo} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {useLocale} from '../i18n';
-import {DATE_FORMAT_MONTH_ONLY, plainDateFormat} from '../utils';
+import {useLocale} from '../i18n/useLocale';
+import {
+  formatCalendarMonthName,
+  formatCalendarYearLabel,
+} from '../utils/calendarSystem';
 import {spacingVars} from '../theme/tokens.stylex';
 import {dateInputTouchGeometry} from './tokens.stylex';
 import {Wheel, type WheelOption} from './Wheel';
-import {fromMonthIndex, toMonthIndex} from './monthGeometry';
+import {clampIndex, type MonthModel} from './monthGeometry';
 
 const styles = stylex.create({
   wheels: {
@@ -40,6 +45,8 @@ const styles = stylex.create({
 });
 
 export interface MonthYearWheelsProps {
+  /** The calendar's months, by index. */
+  monthModel: MonthModel;
   /** The month the wheels currently show. */
   monthIndex: number;
   /** First reachable month. */
@@ -60,6 +67,7 @@ export interface MonthYearWheelsProps {
  * Month and year wheels, bounded by the same range as the scroller.
  */
 export function MonthYearWheels({
+  monthModel,
   monthIndex,
   minMonthIndex,
   maxMonthIndex,
@@ -69,58 +77,43 @@ export function MonthYearWheels({
   isActive = true,
 }: MonthYearWheelsProps) {
   const locale = useLocale();
-  const {year, month} = fromMonthIndex(monthIndex);
-
-  // Day 15 of a fixed year: no timezone can push it into an adjacent month
-  // the way day 1 or day 31 can.
-  //
-  // `plainDateFormat` rather than a raw `Intl.DateTimeFormat`, which the
-  // shared lint rule forbids and which would duplicate the format vocabulary
-  // besides. Recompute when the provider locale changes so the wheel labels
-  // stay in sync with the field and calendar.
-  const monthNames = useMemo(
-    () =>
-      Array.from({length: 12}, (_, index) =>
-        plainDateFormat(
-          {year: 2021, month: index + 1, day: 15},
-          DATE_FORMAT_MONTH_ONLY,
-          locale,
-        ),
-      ),
-    [locale],
-  );
+  const {calendar} = monthModel;
+  const {year, month} = monthModel.yearMonthAt(monthIndex);
 
   // Months outside the range stay on the wheel rather than vanishing: a list
-  // whose length changes with the year would jump under the finger.
+  // whose length changed with the range would jump under the finger. Only the
+  // calendar changes its length, for a year with a leap month.
   const monthOptions: WheelOption[] = useMemo(
     () =>
-      monthNames.map((name, index) => {
-        const candidate = toMonthIndex(year, index + 1);
+      Array.from({length: monthModel.monthsInYear(year)}, (_, index) => {
+        const candidate = monthModel.indexOfYearMonth(year, index + 1);
         return {
           value: index + 1,
-          label: name,
+          label: formatCalendarMonthName(
+            calendar,
+            monthModel.monthAt(candidate),
+            locale,
+          ),
           isDisabled: candidate < minMonthIndex || candidate > maxMonthIndex,
         };
       }),
-    [monthNames, year, minMonthIndex, maxMonthIndex],
+    [monthModel, calendar, year, locale, minMonthIndex, maxMonthIndex],
   );
 
+  // Every listed year holds a reachable month: the list runs from the year of
+  // the first reachable month to the year of the last.
   const yearOptions: WheelOption[] = useMemo(() => {
-    const first = fromMonthIndex(minMonthIndex).year;
-    const last = fromMonthIndex(maxMonthIndex).year;
+    const first = monthModel.yearMonthAt(minMonthIndex).year;
+    const last = monthModel.yearMonthAt(maxMonthIndex).year;
     const options: WheelOption[] = [];
     for (let candidate = first; candidate <= last; candidate++) {
       options.push({
         value: candidate,
-        label: String(candidate),
-        // A year is reachable when any of its months is.
-        isDisabled:
-          toMonthIndex(candidate, 12) < minMonthIndex ||
-          toMonthIndex(candidate, 1) > maxMonthIndex,
+        label: formatCalendarYearLabel(calendar, candidate, locale),
       });
     }
     return options;
-  }, [minMonthIndex, maxMonthIndex]);
+  }, [monthModel, calendar, locale, minMonthIndex, maxMonthIndex]);
 
   return (
     <div {...stylex.props(styles.wheels)}>
@@ -129,7 +122,9 @@ export function MonthYearWheels({
         options={monthOptions}
         value={month}
         isActive={isActive}
-        onChange={nextMonth => onChange(toMonthIndex(year, nextMonth))}
+        onChange={nextMonth =>
+          onChange(monthModel.indexOfYearMonth(year, nextMonth))
+        }
       />
       <Wheel
         label={yearLabel}
@@ -137,10 +132,11 @@ export function MonthYearWheels({
         value={year}
         isActive={isActive}
         onChange={nextYear => {
-          // Jan 31 -> Feb has no equivalent here (months carry no day), but a
-          // year change can still land outside the range; clamp to it.
-          const candidate = toMonthIndex(nextYear, month);
-          onChange(Math.min(Math.max(candidate, minMonthIndex), maxMonthIndex));
+          // The same month of the new year, or its common counterpart when
+          // the new year lacks a leap month (Adar I becomes Adar). A year
+          // change can still land outside the range; clamp to it.
+          const candidate = monthModel.shiftYears(monthIndex, nextYear - year);
+          onChange(clampIndex(candidate, minMonthIndex, maxMonthIndex));
         }}
       />
     </div>

@@ -4,16 +4,17 @@
  * @file calendarSystem.ts
  * @input A calendar identifier and Gregorian PlainDates
  * @output Calendar months located by their Gregorian days, month and year
- *   steps, dates from calendar fields, availability of each calendar, and
- *   calendar labels and digits
+ *   steps, years and months of a calendar, dates from calendar fields,
+ *   availability of each calendar, and calendar labels and digits
  * @position Shared date utility; read by the i18n calendar resolution and by
- *   Calendar. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
- *   every calendar whose months are not Gregorian.
+ *   the date components. Values stay Gregorian PlainDates. Temporal owns the
+ *   arithmetic of every calendar whose months are not Gregorian.
  */
 
 import type {Locale} from '../i18n/types';
 import type {PlainDate} from './dateTypes';
 import {
+  DATE_FORMAT_MONTH_ONLY,
   dateTimeFormatFor,
   plainDateAddDays,
   plainDateAddMonths,
@@ -79,6 +80,14 @@ const GREGORIAN_ALIGNED: ReadonlySet<CalendarSystem> = new Set([
   'japanese',
 ]);
 
+/**
+ * Whether `<input type="date">` can show the calendar. The native control is
+ * Gregorian by specification, so only `gregory` and `iso8601` qualify.
+ */
+export function isGregorianCalendar(calendar: CalendarSystem): boolean {
+  return calendar === 'gregory' || calendar === 'iso8601';
+}
+
 /** Whether the calendar's months and days are the Gregorian ones. */
 export function isGregorianAligned(calendar: CalendarSystem): boolean {
   return GREGORIAN_ALIGNED.has(calendar);
@@ -98,6 +107,10 @@ interface TemporalPlainDate {
   readonly monthsInYear: number;
   with(fields: {day: number}): TemporalPlainDate;
   add(duration: {months?: number; years?: number}): TemporalPlainDate;
+  until(
+    other: TemporalPlainDate,
+    options: {largestUnit: 'months'},
+  ): {readonly months: number};
   withCalendar(calendar: 'iso8601'): TemporalPlainDate;
 }
 
@@ -110,7 +123,7 @@ interface TemporalPlainDateConstructor {
   ): TemporalPlainDate;
   from(
     fields: CalendarDateFields & {calendar: string},
-    options: {overflow: 'reject'},
+    options: {overflow: 'reject' | 'constrain'},
   ): TemporalPlainDate;
 }
 
@@ -456,4 +469,149 @@ export function calendarMonthsInYear(
   return isGregorianAligned(calendar)
     ? 12
     : inCalendar(calendar, pd).monthsInYear;
+}
+
+/**
+ * The number of calendar months from the month `from` to the month `to`:
+ * positive when `to` is later.
+ */
+export function calendarMonthsBetween(
+  calendar: CalendarSystem,
+  from: CalendarMonth,
+  to: CalendarMonth,
+): number {
+  if (isGregorianAligned(calendar)) {
+    return (
+      (to.start.year - from.start.year) * 12 +
+      (to.start.month - from.start.month)
+    );
+  }
+  return inCalendar(calendar, from.start).until(
+    inCalendar(calendar, to.start),
+    {largestUnit: 'months'},
+  ).months;
+}
+
+/**
+ * The year of the calendar that a date falls in, and the position of its month
+ * in that year (1 for the first month). Gregorian-aligned calendars count
+ * Gregorian years; the others count the calendar's own years, as Temporal
+ * does, so a Hebrew leap year has months 1 to 13.
+ */
+export function calendarYearMonthOf(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+): {readonly year: number; readonly month: number} {
+  if (isGregorianAligned(calendar)) {
+    return {year: pd.year, month: pd.month};
+  }
+  const {year, month} = inCalendar(calendar, pd);
+  return {year, month};
+}
+
+/**
+ * The calendar month at a position in a year of the calendar, as
+ * {@link calendarYearMonthOf} counts them. A position past the last month of
+ * the year is the last month.
+ */
+export function calendarMonthOfYear(
+  calendar: CalendarSystem,
+  year: number,
+  month: number,
+): CalendarMonth {
+  if (isGregorianAligned(calendar)) {
+    return gregorianMonth(year, month);
+  }
+  const temporal = getTemporal();
+  if (temporal == null) {
+    throw new Error(`The "${calendar}" calendar needs Temporal.`);
+  }
+  return temporalMonth(
+    temporal.PlainDate.from(
+      {calendar, year, month, day: 1},
+      {overflow: 'constrain'},
+    ),
+  );
+}
+
+/** The number of months in a year of the calendar. */
+export function calendarMonthsInCalendarYear(
+  calendar: CalendarSystem,
+  year: number,
+): number {
+  return isGregorianAligned(calendar)
+    ? 12
+    : calendarMonthsInYear(
+        calendar,
+        calendarMonthOfYear(calendar, year, 1).start,
+      );
+}
+
+/**
+ * The name of a calendar month, such as "Adar I". It formats the middle day of
+ * the month, for the reason {@link formatCalendarMonthLabel} gives.
+ */
+export function formatCalendarMonthName(
+  calendar: CalendarSystem,
+  month: CalendarMonth,
+  locale: Locale,
+): string {
+  return formatCalendarDate(
+    calendar,
+    plainDateAddDays(month.start, Math.floor(month.length / 2)),
+    DATE_FORMAT_MONTH_ONLY,
+    locale,
+  );
+}
+
+const YEAR_PART_TYPES: ReadonlySet<string> = new Set([
+  'era',
+  'year',
+  'relatedYear',
+]);
+
+/**
+ * The label of a year of the calendar, with its era where the locale writes
+ * one in a date, such as "令和8" in `ja-JP` or "1405 AP" in English. It uses the
+ * era and year parts of a long date in the middle of the year, in the locale's
+ * order and digits, with the text between them. Gregorian years are plain
+ * numbers.
+ */
+export function formatCalendarYearLabel(
+  calendar: CalendarSystem,
+  year: number,
+  locale: Locale,
+): string {
+  if (isGregorianCalendar(calendar)) {
+    return String(year);
+  }
+  const months = calendarMonthsInCalendarYear(calendar, year);
+  const middle = calendarMonthOfYear(
+    calendar,
+    year,
+    Math.floor(months / 2) + 1,
+  ).start;
+  const parts = formatToParts(
+    calendar,
+    middle,
+    {era: 'short', year: 'numeric', month: 'long', day: 'numeric'},
+    locale,
+  );
+  const first = parts.findIndex(part => YEAR_PART_TYPES.has(part.type));
+  if (first === -1) {
+    return String(year);
+  }
+  let last = first;
+  parts.forEach((part, index) => {
+    if (YEAR_PART_TYPES.has(part.type)) {
+      last = index;
+    }
+  });
+  return parts
+    .slice(first, last + 1)
+    .filter(part => YEAR_PART_TYPES.has(part.type) || part.type === 'literal')
+    .map(part => part.value)
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

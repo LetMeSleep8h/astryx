@@ -4,7 +4,7 @@
 
 /**
  * @file TouchDateTimeField.tsx
- * @input Uses React, Field, BottomSheet, SegmentedControl, DateInput month picker primitives, Wheel, StyleX intrinsic flex layout
+ * @input Uses React, Field, BottomSheet, SegmentedControl, DateInput month picker primitives, the resolved calendar, Wheel, StyleX intrinsic flex layout
  * @output Exports TouchDateTimeField — the coarse-pointer surface behind DateTimeInput
  * @position Internal component; consumed by DateTimeInput.tsx
  *
@@ -90,7 +90,11 @@ import {
   plainDateToday,
   type PlainDate,
 } from '../utils/plainDate';
-import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
+import {
+  formatCalendarDate,
+  formatCalendarMonthLabel,
+} from '../utils/calendarSystem';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   MonthScroller,
   type MonthScrollerHandle,
@@ -104,8 +108,7 @@ import {
 import {
   DEFAULT_MONTH_REACH,
   clampIndex,
-  fromMonthIndex,
-  monthIndexOf,
+  createMonthModel,
 } from '../DateInput/monthGeometry';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
 import {
@@ -477,6 +480,7 @@ export function TouchDateTimeField({
   // Desktop-only: the touch Date panel shows one swipe-paged month at a time.
   numberOfMonths: _numberOfMonths,
   weekStartsOn: weekStartsOnProp = 0,
+  calendar: calendarProp,
   width,
   containerXstyle,
   containerClassName,
@@ -606,6 +610,8 @@ export function TouchDateTimeField({
     [timeForWheels],
   );
   const weekStartsOn = normalizeDayOfWeek(weekStartsOnProp);
+  const calendar = useCalendarSystem(calendarProp, 'DateTimeInput');
+  const monthModel = useMemo(() => createMonthModel(calendar), [calendar]);
 
   // The draft follows the controlled time, and an external clear resets it.
   // Adjusted during render when the value changes, so no commit paints the
@@ -627,16 +633,18 @@ export function TouchDateTimeField({
     }
   }
 
+  // Indexes belong to the calendar, so DateTimeInput remounts this surface
+  // when the calendar changes.
   const [anchorMonthIndex] = useState(() =>
-    monthIndexOf(selectedDate ?? plainDateToday()),
+    monthModel.indexOf(selectedDate ?? plainDateToday()),
   );
   const minMonthIndex =
     calendarMin != null
-      ? monthIndexOf(plainDateFromISO(calendarMin))
+      ? monthModel.indexOf(plainDateFromISO(calendarMin))
       : anchorMonthIndex - DEFAULT_MONTH_REACH;
   const maxMonthIndex =
     calendarMax != null
-      ? monthIndexOf(plainDateFromISO(calendarMax))
+      ? monthModel.indexOf(plainDateFromISO(calendarMax))
       : anchorMonthIndex + DEFAULT_MONTH_REACH;
   const [monthIndex, setMonthIndex] = useState(() =>
     clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex),
@@ -654,7 +662,6 @@ export function TouchDateTimeField({
   if (!Object.is(clampedMonthIndex, monthIndex)) {
     setMonthIndex(clampedMonthIndex);
   }
-  const {year, month} = fromMonthIndex(monthIndex);
   const canStepBack = monthIndex > minMonthIndex;
   const canStepForward = monthIndex < maxMonthIndex;
 
@@ -669,8 +676,9 @@ export function TouchDateTimeField({
       ),
     [weekStartsOn, locale],
   );
-  const monthYearLabel = plainDateFormatStandaloneMonthYear(
-    {year, month, day: 1},
+  const monthYearLabel = formatCalendarMonthLabel(
+    calendar,
+    monthModel.monthAt(monthIndex),
     locale,
   );
 
@@ -678,8 +686,8 @@ export function TouchDateTimeField({
     if (selectedDate == null) {
       return '';
     }
-    return plainDateFormat(selectedDate, DATE_FORMAT_LONG, locale);
-  }, [selectedDate, locale]);
+    return formatCalendarDate(calendar, selectedDate, DATE_FORMAT_LONG, locale);
+  }, [calendar, selectedDate, locale]);
 
   const timeDisplayValue = useMemo(() => {
     const displayTime = normalizedValueTime ?? draftTime;
@@ -788,13 +796,13 @@ export function TouchDateTimeField({
   const handleResetInSheet = useCallback(() => {
     fireChange(undefined);
     setDraftTime(undefined);
-    const currentMonth = monthIndexOf(today);
+    const currentMonth = monthModel.indexOf(today);
     if (currentMonth < minMonthIndex || currentMonth > maxMonthIndex) {
       return;
     }
     setMonthIndex(currentMonth);
     scrollerHandleRef.current?.scrollToMonth(currentMonth, 'smooth');
-  }, [fireChange, today, minMonthIndex, maxMonthIndex]);
+  }, [fireChange, monthModel, today, minMonthIndex, maxMonthIndex]);
 
   const handleDateSelect = useCallback(
     (nextDate: ISODateString) => {
@@ -1150,6 +1158,7 @@ export function TouchDateTimeField({
               <MonthScroller
                 key={`${minMonthIndex}:${maxMonthIndex}`}
                 handleRef={scrollerHandleRef}
+                monthModel={monthModel}
                 minMonthIndex={minMonthIndex}
                 maxMonthIndex={maxMonthIndex}
                 initialMonthIndex={monthIndex}
@@ -1195,6 +1204,7 @@ export function TouchDateTimeField({
                 {...stylex.props(styles.touchWheelSpacer)}
               />
               <MonthYearWheels
+                monthModel={monthModel}
                 monthIndex={monthIndex}
                 minMonthIndex={minMonthIndex}
                 maxMonthIndex={maxMonthIndex}
