@@ -4,7 +4,8 @@
  * @file calendarSystem.ts
  * @input A calendar identifier and Gregorian PlainDates
  * @output Calendar months located by their Gregorian days, month and year
- *   steps, availability of each calendar, and calendar labels and digits
+ *   steps, dates from calendar fields, availability of each calendar, and
+ *   calendar labels and digits
  * @position Shared date utility; read by the i18n calendar resolution and by
  *   Calendar. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
  *   every calendar whose months are not Gregorian.
@@ -94,18 +95,27 @@ interface TemporalPlainDate {
   readonly month: number;
   readonly day: number;
   readonly daysInMonth: number;
+  readonly monthsInYear: number;
   with(fields: {day: number}): TemporalPlainDate;
   add(duration: {months?: number; years?: number}): TemporalPlainDate;
   withCalendar(calendar: 'iso8601'): TemporalPlainDate;
 }
 
-interface TemporalNamespace {
-  PlainDate: new (
+interface TemporalPlainDateConstructor {
+  new (
     isoYear: number,
     isoMonth: number,
     isoDay: number,
     calendar: string,
-  ) => TemporalPlainDate;
+  ): TemporalPlainDate;
+  from(
+    fields: CalendarDateFields & {calendar: string},
+    options: {overflow: 'reject'},
+  ): TemporalPlainDate;
+}
+
+interface TemporalNamespace {
+  PlainDate: TemporalPlainDateConstructor;
 }
 
 function getTemporal(): TemporalNamespace | undefined {
@@ -397,4 +407,53 @@ export function formatDayNumber(
     dayNumberFormats.set(key, format);
   }
   return format.format(day);
+}
+
+/**
+ * The fields of a date written in a calendar. A field gives either `year` or
+ * `era` with `eraYear`, and either `monthCode` (such as `M05L` for a leap
+ * month) or `month`, the month's position in its year.
+ */
+export interface CalendarDateFields {
+  readonly year?: number;
+  readonly era?: string;
+  readonly eraYear?: number;
+  readonly monthCode?: string;
+  readonly month?: number;
+  readonly day: number;
+}
+
+/**
+ * The Gregorian date for fields written in a calendar that needs Temporal,
+ * or null when the calendar does not have that date. Temporal validates the
+ * fields and never adjusts them: 30 Esfand in a common Persian year is null.
+ */
+export function calendarDateFromFields(
+  calendar: CalendarSystem,
+  fields: CalendarDateFields,
+): PlainDate | null {
+  const temporal = getTemporal();
+  if (temporal == null) {
+    throw new Error(`The "${calendar}" calendar needs Temporal.`);
+  }
+  try {
+    return toGregorian(
+      temporal.PlainDate.from({...fields, calendar}, {overflow: 'reject'}),
+    );
+  } catch (error) {
+    if (error instanceof RangeError || error instanceof TypeError) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/** The number of months in the calendar year that contains a date. */
+export function calendarMonthsInYear(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+): number {
+  return isGregorianAligned(calendar)
+    ? 12
+    : inCalendar(calendar, pd).monthsInYear;
 }

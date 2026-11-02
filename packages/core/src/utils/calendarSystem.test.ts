@@ -7,8 +7,10 @@ import {
   type CalendarMonth,
   type CalendarSystem,
   calendarAddMonths,
+  calendarDateFromFields,
   calendarDayOfMonth,
   calendarMonthOf,
+  calendarMonthsInYear,
   calendarShiftMonths,
   calendarShiftYears,
   formatCalendarDate,
@@ -280,5 +282,75 @@ describe('calendar labels', () => {
         'en',
       ),
     ).toBe('Friday, Aban 8, 1405 AP');
+  });
+});
+
+describe('dates from calendar fields', () => {
+  const toISO = (pd: PlainDate | null) =>
+    pd == null ? null : plainDateToISO(pd);
+
+  it('converts calendar fields to the Gregorian date', () => {
+    expect(
+      toISO(
+        calendarDateFromFields('persian', {
+          year: 1405,
+          monthCode: 'M08',
+          day: 11,
+        }),
+      ),
+    ).toBe('2026-11-02');
+    expect(
+      toISO(calendarDateFromFields('hebrew', {year: 5784, month: 6, day: 1})),
+    ).toBe('2024-02-10');
+    expect(
+      toISO(
+        calendarDateFromFields('ethiopic', {
+          era: 'aa',
+          eraYear: 7519,
+          monthCode: 'M01',
+          day: 1,
+        }),
+      ),
+    ).toBe('2026-09-11');
+  });
+
+  it('returns null for a date the calendar does not have', () => {
+    expect(
+      calendarDateFromFields('persian', {
+        year: 1404,
+        monthCode: 'M12',
+        day: 30,
+      }),
+    ).toBeNull();
+    expect(
+      calendarDateFromFields('hebrew', {year: 5785, monthCode: 'M05L', day: 1}),
+    ).toBeNull();
+    expect(
+      calendarDateFromFields('ethiopic', {
+        year: 2016,
+        monthCode: 'M13',
+        day: 6,
+      }),
+    ).toBeNull();
+    expect(
+      calendarDateFromFields('chinese', {
+        year: 2026,
+        monthCode: 'M06L',
+        day: 1,
+      }),
+    ).toBeNull();
+    expect(
+      calendarDateFromFields('islamic-umalqura', {
+        year: 1448,
+        monthCode: 'M01',
+        day: 30,
+      }),
+    ).toBeNull();
+  });
+
+  it('counts the months of the calendar year', () => {
+    expect(calendarMonthsInYear('hebrew', iso('2024-02-10'))).toBe(13);
+    expect(calendarMonthsInYear('hebrew', iso('2025-03-01'))).toBe(12);
+    expect(calendarMonthsInYear('gregory', iso('2025-03-01'))).toBe(12);
   });
 });
