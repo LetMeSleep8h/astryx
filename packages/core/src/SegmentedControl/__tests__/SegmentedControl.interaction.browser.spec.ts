@@ -1018,7 +1018,7 @@ async function holdLensAnimationsAtBirth(page: Page): Promise<void> {
   });
 }
 
-test('with a mouse a click selects with the theme’s color transition and shows no lens', async ({
+test('with a mouse a click slides the selection to the new segment on the theme’s timing, then hands the surface back', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -1052,16 +1052,44 @@ test('with a mouse a click selects with the theme’s color transition and shows
         );
       });
     expect(await noLens()).toBe(true);
-    await expect(group.locator('[data-value="list"]')).toHaveCSS(
-      'transition-property',
-      'color, background-color, box-shadow',
+    // Every frame for half a second from the click: is the lens shown, and
+    // where is its center?
+    const sampling = group.evaluate(
+      async element =>
+        new Promise<{shown: boolean; center: number}[]>(resolve => {
+          const seen: {shown: boolean; center: number}[] = [];
+          const start = performance.now();
+          const tick = () => {
+            const lens = getComputedStyle(element, '::before');
+            const x =
+              lens.translate === 'none' ? 0 : parseFloat(lens.translate);
+            seen.push({
+              shown: lens.visibility === 'visible',
+              center: parseFloat(lens.left) + parseFloat(lens.width) / 2 + x,
+            });
+            if (performance.now() - start < 500) {
+              requestAnimationFrame(tick);
+            } else {
+              resolve(seen);
+            }
+          };
+          requestAnimationFrame(tick);
+        }),
     );
     await group.locator('[data-value="table"]').click();
     await expect(group.locator('[data-value="table"]')).toHaveAttribute(
       'aria-checked',
       'true',
     );
-    expect(await noLens()).toBe(true);
+    const frames = await sampling;
+    const shown = frames.filter(frame => frame.shown);
+    // The lens travels: shown on more than one frame, at more than one place.
+    expect(shown.length).toBeGreaterThan(1);
+    expect(
+      new Set(shown.map(frame => Math.round(frame.center))).size,
+    ).toBeGreaterThan(1);
+    // Then the segment paints its own surface again.
+    await expect.poll(noLens).toBe(true);
   } finally {
     await context.close();
   }
@@ -1158,14 +1186,13 @@ test('RTL: the surface slides toward the tapped segment', async ({page}) => {
   }
 });
 
-test('Reduce Motion: a drag leaves the lens parked, commits at the lift, and the selection cross-fades there (design:reduced-motion: a touch release fades)', async ({
+test('Reduce Motion: a drag still carries the lens with the finger (direct movement), commits at the lift, and the selection cross-fades there (design:reduced-motion: a touch release fades)', async ({
   page,
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const control = await openControl(page);
-  const grid = boxOf(await control.boxes(), 'grid');
   const selections = await recordSelections(control.group);
-  const parked: boolean[] = [];
+  const carried: {visible: boolean; center: number}[] = [];
   let liftAt = 0;
   const {samples} = await sampleReducedMotionChange(page, control, async () => {
     const played = await control.driver.play(
@@ -1177,33 +1204,45 @@ test('Reduce Motion: a drag leaves the lens parked, commits at the lift, and the
       {
         onEvent: async step => {
           if (step.type === 'touchMove') {
-            // No lift, no chase: no lens, the selected segment paints itself.
-            parked.push(!(await presentedNow(control)).visible);
+            // The lens is where the finger is: no chase, no lift.
+            const presented = await presentedNow(control);
+            carried.push({
+              visible: presented.visible,
+              center: presented.center,
+            });
           }
         },
       },
     );
     liftAt = played.find(event => event.type === 'touchEnd')?.dispatchedAt ?? 0;
   });
-  expect(parked.length).toBeGreaterThan(5);
-  expect(parked.every(Boolean)).toBe(true);
+  expect(carried.length).toBeGreaterThan(5);
+  // Once the pan claims the drag, the lens is shown and moves with the
+  // finger, toward Table.
+  const moving = carried.filter(sample => sample.visible);
+  expect(moving.length).toBeGreaterThan(3);
+  for (let i = 1; i < moving.length; i++) {
+    expect(moving[i].center).toBeGreaterThanOrEqual(moving[i - 1].center - 0.5);
+  }
+  expect(moving[moving.length - 1].center).toBeGreaterThan(moving[0].center);
   // The segment under the finger at the lift, once.
   const changes = await selections();
   expect(changes.map(change => change.value)).toEqual(['table']);
   expect(changes[0].at).toBeGreaterThanOrEqual(liftAt - 5);
   // Then it cross-fades in 200 ms or less (DR1, DR2). The lens fades in on
   // Table, full size and still, where Table sits with its new title weight.
-  // The ::after fades out on Grid.
+  // The ::after fades out where the finger left the lens, without moving.
   const table = boxOf(await control.boxes(), 'table');
   const fadeEnd = fadeEndOf(samples);
   expect(fadeEnd).toBeGreaterThan(0);
   expect(fadeEnd).toBeLessThanOrEqual(RM_MAX_FADE_MS);
+  const leavingX = samples.find(sample => sample.leaving != null)?.leaving?.x;
   for (const {t, entering, leaving} of samples) {
     const label = JSON.stringify({t, entering, leaving});
     expect(Math.abs((entering?.x ?? 0) - table.x), label).toBeLessThan(0.5);
     expect(entering?.sx, label).toBe(1);
     if (leaving != null && leaving.opacity > 0.001) {
-      expect(Math.abs(leaving.x - grid.x), label).toBeLessThan(0.5);
+      expect(Math.abs(leaving.x - (leavingX ?? 0)), label).toBeLessThan(0.5);
       expect(leaving.sx, label).toBe(1);
     }
   }
@@ -2201,7 +2240,7 @@ test('with a mouse a drag from the selected segment carries the selection and co
   }
 });
 
-test('with a mouse a drag that starts on another segment commits only where it lifts, focus already in the group or not, and carries no lens', async ({
+test('with a mouse a drag that starts on another segment commits only where it lifts, focus already in the group or not; it carries no lens, and the commit slides there', async ({
   browser,
 }) => {
   const {context, page, group, centerOf, lensShown} =
@@ -2228,7 +2267,8 @@ test('with a mouse a drag that starts on another segment commits only where it l
       'true',
     );
     expect((await selections()).map(change => change.value)).toEqual(['table']);
-    expect(await lensShown()).toBe(false);
+    // The commit's slide hands the surface back once it lands.
+    await expect.poll(lensShown).toBe(false);
   } finally {
     await context.close();
   }

@@ -4,15 +4,12 @@
  * @file useSegmentedTouchTracking.test.ts
  * @input useSegmentedTouchTracking.ts's segment resolution
  * @output Proof of which segment a finger counts for, the rule the
- *   action-group tracker resolves the highlight and the commit with; and of
- *   which click the late-click guard swallows
+ *   action-group tracker resolves the highlight and the commit with
  * @position Testing for /packages/core/src/SegmentedControl/useSegmentedTouchTracking.ts
  */
 
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {
-  awaitBrowserClick,
-  isLateClick,
   liftTargetAt,
   segmentTargetAt,
   type SegmentSpan,
@@ -102,94 +99,5 @@ describe('liftTargetAt', () => {
 
   it('commits nothing over a disabled segment', () => {
     expect(liftAt(150, 35, spans(layout, ['list']))).toBeNull();
-  });
-});
-
-describe('isLateClick', () => {
-  const segment = document.createElement('button');
-  const label = document.createElement('span');
-  segment.append(label);
-
-  it('swallows the browser\u2019s own trusted click on the segment', () => {
-    expect(
-      isLateClick({isTrusted: true, detail: 1, target: label}, segment),
-    ).toBe(true);
-  });
-
-  it('lets a keyboard\u2019s or assistive technology\u2019s activation (detail 0) through (AST-094 FR21)', () => {
-    expect(
-      isLateClick({isTrusted: true, detail: 0, target: label}, segment),
-    ).toBe(false);
-  });
-
-  it('lets a script\u2019s click and a click elsewhere through', () => {
-    expect(
-      isLateClick({isTrusted: false, detail: 1, target: label}, segment),
-    ).toBe(false);
-    expect(
-      isLateClick(
-        {isTrusted: true, detail: 1, target: document.createElement('div')},
-        segment,
-      ),
-    ).toBe(false);
-  });
-});
-
-describe('awaitBrowserClick', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  const setUp = () => {
-    vi.useFakeTimers();
-    const segment = document.createElement('button');
-    document.body.append(segment);
-    const clicks: Event[] = [];
-    segment.addEventListener('click', event => clicks.push(event));
-    return {segment, clicks};
-  };
-
-  it('clicks the segment itself when the browser sends no click, and counts as pending until the swallower stops', () => {
-    const {segment, clicks} = setUp();
-    const results: boolean[] = [];
-    const pending = new Set<() => void>();
-    awaitBrowserClick(segment, cancelled => results.push(cancelled), pending);
-    expect(pending.size).toBe(1);
-    vi.advanceTimersByTime(300);
-    expect(clicks).toHaveLength(1);
-    expect(results).toEqual([false]);
-    // The late-click swallower still listens until the next press.
-    expect(pending.size).toBe(1);
-    window.dispatchEvent(new Event('pointerdown'));
-    expect(pending.size).toBe(0);
-    segment.remove();
-  });
-
-  it('leaves no timer or listener behind once its pending entry ends it, as an unmount does', () => {
-    const {segment, clicks} = setUp();
-    const results: boolean[] = [];
-    const pending = new Set<() => void>();
-    awaitBrowserClick(segment, cancelled => results.push(cancelled), pending);
-    for (const end of [...pending]) {
-      end();
-    }
-    vi.advanceTimersByTime(1000);
-    expect(clicks).toHaveLength(0);
-    expect(results).toEqual([]);
-    expect(pending.size).toBe(0);
-    segment.remove();
-  });
-
-  it('ends a swallower that is still listening when its entry ends it', () => {
-    const {segment} = setUp();
-    const pending = new Set<() => void>();
-    awaitBrowserClick(segment, () => {}, pending);
-    vi.advanceTimersByTime(300);
-    expect(pending.size).toBe(1);
-    for (const end of [...pending]) {
-      end();
-    }
-    expect(pending.size).toBe(0);
-    segment.remove();
   });
 });

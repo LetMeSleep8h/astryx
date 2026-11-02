@@ -92,6 +92,16 @@ export interface ActionGroupTracker {
    * that shows it as focus keeps focus on the action it runs.
    */
   end(): HTMLElement | null;
+  /**
+   * The lift of a tap, for which the browser sends its own click. Like `end`,
+   * but the action runs through that click: the tracker waits for it and
+   * reports it through `onActivated`. With no click in time (a lift the
+   * browser does not count as a click), it clicks the action itself and
+   * swallows a click that comes later, so the action runs once. For an
+   * owner that runs actions through their click (no `onActivate`). Returns
+   * the action, if any.
+   */
+  endTap(): HTMLElement | null;
   /** The press was taken away (a cancel): the highlight is cut, nothing runs. */
   cancel(): void;
   /**
@@ -112,8 +122,9 @@ export interface ActionGroupTracker {
   /** Whether a press is being tracked (between begin and end or cancel). */
   readonly isTracking: boolean;
   /**
-   * Finish every pending release fade now (its paint comes off) and forget
-   * the press: for the owner's unmount.
+   * Finish every pending release fade now (its paint comes off), end every
+   * tap wait and click swallower, and forget the press: for the owner's
+   * unmount.
    */
   dispose(): void;
 }
@@ -127,17 +138,27 @@ interface TrackedAction {
 }
 
 /**
+ * How long a tap's lift waits for the browser's own click before the tracker
+ * clicks the action itself, ms. The browser sends that click with the lift
+ * when the target has no double-tap delay, so the wait runs out only for a
+ * lift that the browser does not count as a click.
+ */
+const BROWSER_CLICK_WAIT_MS = 300;
+
+/**
  * Swallow the browser's own click for a touch that the lift already acted
  * on. The listeners exist only from that lift until the click, the next
  * press, or the next key. An activation with `detail === 0` (a key or
  * assistive technology) always passes, and the swallower keeps waiting
- * (`AST-094`).
+ * (`AST-094`). While it listens, `listening` holds its disarm.
  */
-function swallowNextClick(view: Window): void {
+function swallowNextClick(view: Window, listening: Set<() => void>): void {
   const disarm = () => {
     view.removeEventListener('click', onClick, true);
     view.removeEventListener('pointerdown', disarm, true);
+    view.removeEventListener('touchstart', disarm, true);
     view.removeEventListener('keydown', disarm, true);
+    listening.delete(disarm);
   };
   const onClick = (event: MouseEvent) => {
     if (!event.isTrusted || event.detail === 0) {
@@ -149,7 +170,9 @@ function swallowNextClick(view: Window): void {
   };
   view.addEventListener('click', onClick, true);
   view.addEventListener('pointerdown', disarm, true);
+  view.addEventListener('touchstart', disarm, {capture: true, passive: true});
   view.addEventListener('keydown', disarm, true);
+  listening.add(disarm);
 }
 
 /**
@@ -202,6 +225,8 @@ export function createActionGroupTracker(
   let lastX = 0;
   let lastY = 0;
   const fades = new Map<Element, ReturnType<typeof setTimeout>>();
+  // Tap waits and click swallowers still listening: `dispose` ends them.
+  const listening = new Set<() => void>();
 
   const paints = () => getOptions().paintsHighlight !== false;
 
@@ -300,6 +325,65 @@ export function createActionGroupTracker(
     return null;
   };
 
+  /** Runs `lifted` (`onActivate`, else its own click) and reports it. */
+  const runAction = (lifted: HTMLElement, swallowsLateClick: boolean) => {
+    const {onActivate, onActivated} = getOptions();
+    if (onActivate != null) {
+      onActivate(lifted);
+    } else {
+      const cancelled = clickAndReport(lifted);
+      onActivated?.(lifted, cancelled);
+    }
+    const view = lifted.ownerDocument.defaultView;
+    if (swallowsLateClick && view != null) {
+      swallowNextClick(view, listening);
+    }
+  };
+
+  /**
+   * Waits for the browser's own click on `lifted` after a tap, then reports
+   * whether a handler cancelled it. With no click in time, it runs the action
+   * itself and swallows the browser's click if it comes later, because a busy
+   * main thread held it.
+   */
+  const awaitBrowserClick = (lifted: HTMLElement) => {
+    const view = lifted.ownerDocument.defaultView;
+    if (view == null) {
+      return;
+    }
+    let isEnded = false;
+    const end = () => {
+      isEnded = true;
+      view.removeEventListener('click', grab, true);
+      view.clearTimeout(timer);
+      listening.delete(end);
+    };
+    const grab = (event: MouseEvent) => {
+      if (!event.isTrusted || !lifted.contains(event.target as Node | null)) {
+        return;
+      }
+      view.removeEventListener('click', grab, true);
+      view.clearTimeout(timer);
+      // Report after every handler has run: was it cancelled?
+      view.setTimeout(() => {
+        if (isEnded) {
+          return;
+        }
+        end();
+        getOptions().onActivated?.(lifted, event.defaultPrevented);
+      }, 0);
+    };
+    const timer = view.setTimeout(() => {
+      if (isEnded) {
+        return;
+      }
+      end();
+      runAction(lifted, true);
+    }, BROWSER_CLICK_WAIT_MS);
+    view.addEventListener('click', grab, true);
+    listening.add(end);
+  };
+
   const reset = () => {
     actions = [];
     highlighted = null;
@@ -355,17 +439,21 @@ export function createActionGroupTracker(
       if (lifted.matches(DISABLED)) {
         return null;
       }
-      const {onActivate, onActivated, swallowsNativeClick} = getOptions();
-      if (onActivate != null) {
-        onActivate(lifted);
-      } else {
-        const cancelled = clickAndReport(lifted);
-        onActivated?.(lifted, cancelled);
+      runAction(lifted, getOptions().swallowsNativeClick === true);
+      return lifted;
+    },
+    endTap() {
+      const lifted = highlighted;
+      const wasTracking = isTracking;
+      reset();
+      if (!wasTracking || lifted == null) {
+        return null;
       }
-      const view = lifted.ownerDocument.defaultView;
-      if (swallowsNativeClick === true && view != null) {
-        swallowNextClick(view);
+      release(lifted);
+      if (lifted.matches(DISABLED)) {
+        return null;
       }
+      awaitBrowserClick(lifted);
       return lifted;
     },
     cancel() {
@@ -411,6 +499,9 @@ export function createActionGroupTracker(
         }
       }
       fades.clear();
+      for (const end of [...listening]) {
+        end();
+      }
       reset();
     },
   };

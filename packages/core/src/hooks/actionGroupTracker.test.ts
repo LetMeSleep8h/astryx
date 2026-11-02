@@ -426,10 +426,93 @@ describe('createActionGroupTracker: options for other trackers', () => {
         .filter(([, , capture]) => capture === true)
         .map(([type]) => type)
         .sort();
-      expect(removed).toEqual(['click', 'keydown', 'pointerdown']);
+      expect(removed).toEqual([
+        'click',
+        'keydown',
+        'pointerdown',
+        'touchstart',
+      ]);
       document.removeEventListener('click', onDocumentClick);
     } finally {
       add.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
+  it('endTap reports the browser\u2019s own click and clicks nothing itself', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    try {
+      const onActivated = vi.fn();
+      const group = tracker({onActivated});
+      group.begin(50, 10);
+      add.mockClear();
+      group.endTap();
+      // jsdom's events are untrusted: hand the wait's capture listener the
+      // browser's click directly.
+      const grab = add.mock.calls.find(([type]) => type === 'click')?.[1] as (
+        event: unknown,
+      ) => void;
+      grab({isTrusted: true, target: left.button, defaultPrevented: true});
+      vi.advanceTimersByTime(0);
+      expect(onActivated).toHaveBeenCalledWith(left.button, true);
+      vi.advanceTimersByTime(1000);
+      // The browser's click was the activation: the tracker clicks nothing.
+      expect(left.onClick).not.toHaveBeenCalled();
+      expect(onActivated).toHaveBeenCalledTimes(1);
+    } finally {
+      add.mockRestore();
+    }
+  });
+
+  it('endTap clicks the action itself when the browser sends no click, then swallows a late one until the next press', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    try {
+      const onActivated = vi.fn();
+      const group = tracker({onActivated});
+      group.begin(50, 10);
+      group.endTap();
+      expect(left.onClick).not.toHaveBeenCalled();
+      add.mockClear();
+      vi.advanceTimersByTime(300);
+      expect(left.onClick).toHaveBeenCalledTimes(1);
+      expect(onActivated).toHaveBeenCalledWith(left.button, false);
+      // The swallower listens for the browser's late click, and the next
+      // touch or press ends it.
+      const types = add.mock.calls.map(([type]) => type);
+      expect(types).toEqual(
+        expect.arrayContaining(['click', 'pointerdown', 'touchstart']),
+      );
+    } finally {
+      add.mockRestore();
+    }
+  });
+
+  it('dispose ends a tap wait and a swallower, leaving no timer or listener behind', () => {
+    const remove = vi.spyOn(window, 'removeEventListener');
+    try {
+      const waiting = tracker();
+      waiting.begin(50, 10);
+      waiting.endTap();
+      waiting.dispose();
+      vi.advanceTimersByTime(1000);
+      expect(left.onClick).not.toHaveBeenCalled();
+
+      const swallowing = tracker();
+      swallowing.begin(50, 10);
+      swallowing.endTap();
+      vi.advanceTimersByTime(300);
+      expect(left.onClick).toHaveBeenCalledTimes(1);
+      remove.mockClear();
+      swallowing.dispose();
+      expect(remove.mock.calls.map(([type]) => type)).toEqual(
+        expect.arrayContaining([
+          'click',
+          'pointerdown',
+          'touchstart',
+          'keydown',
+        ]),
+      );
+    } finally {
       remove.mockRestore();
     }
   });
@@ -494,7 +577,12 @@ describe('createActionGroupTracker: options for other trackers', () => {
       const group = tracker({swallowsNativeClick: true});
       group.begin(50, 10);
       group.end();
-      expect(listening()).toEqual(['click', 'keydown', 'pointerdown']);
+      expect(listening()).toEqual([
+        'click',
+        'keydown',
+        'pointerdown',
+        'touchstart',
+      ]);
       // The next press comes first (the browser gave no click): disarmed.
       window.dispatchEvent(new PointerEvent('pointerdown'));
       expect(listening()).toEqual([]);

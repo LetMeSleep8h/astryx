@@ -55,7 +55,7 @@ system_specs: [spec:AST-020, spec:AST-085, spec:AST-102]
 | Behavior                | One segment: a `<button role="radio">` with `aria-checked`. A click, or Space or Enter on the focused segment, selects it unless it is selected, disabled, or the caller's `onClick` prevents default.                                                                                                  |
 | End-user impact         | People see the selected segment raised and bold, and pick another with one click. Icon-only segments are still named. A disabled selected segment keeps the Tab stop.                                                                                                                                   |
 | Builder impact          | None.                                                                                                                                                                                                                                                                                                   |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. A caller `onClick` runs while disabled or cannot veto a press while focused, a caller `className` is replaced, segments hold a fixed height, and a truncated `sm` segment can be under 24 px wide; all are listed under Current-state impact. |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. A caller `onClick` runs while disabled, a caller `className` is replaced, segments hold a fixed height, and a truncated `sm` segment can be under 24 px wide; all are listed under Current-state impact.                                      |
 | Review checks           | Reject a segment without a name, a click that selects a disabled segment, press paint on the selected or a disabled segment, or a lost forced-colors selected state.                                                                                                                                    |
 | Governing rules         | `component:SegmentedControl`; WAI-ARIA radio pattern; `spec:AST-020` FR9, FR15, DEC-5; `spec:AST-085` FR1, FR2; `spec:AST-102` FR4; `design:user-states` DR1–DR3 (pressed overlay, disabled non-response, and selected-segment exception); `architecture:public-component-api` INV5, INV6; WCAG 1.4.11. |
 
@@ -182,8 +182,6 @@ theming anatomy.
 
 - **Narrow target (AR2).** A labelled `sm` segment that truncates can shrink
   below 24 CSS px wide, short of WCAG 2.5.8.
-- **Press veto (FR2).** A caller `onClick` cannot veto a press made while focus
-  is already in the group, which selects before the click.
 - **Caller className (FR7).** A caller `className` on a segment is replaced by
   the component's class, against `architecture:public-component-api` INV5 and
   INV6.

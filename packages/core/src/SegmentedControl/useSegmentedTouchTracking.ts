@@ -33,150 +33,6 @@ import {
   type SegmentedSelectionMotion,
 } from './useSegmentedSelectionMotion';
 
-/**
- * How long a tap's lift waits for the browser's own click before the segment
- * is clicked directly, ms. The browser sends that click with the lift's
- * `touchend`, because the track has no double-tap delay. So the wait runs out
- * only for a lift that the browser does not count as a click.
- */
-const BROWSER_CLICK_WAIT_MS = 300;
-
-/**
- * Waits for the browser's own click on `segment` after a tap, then reports
- * whether a handler cancelled it. With no click in time, it clicks the segment
- * itself and reports that. Either way the tap activates once. The browser's
- * click stops the wait when it arrives. A browser click that comes after the
- * direct click is swallowed, because a busy main thread held it.
- *
- * The wait stays in `pending` until nothing of it is left. Calling its entry
- * ends it at once, so an unmount leaves no timer or listener behind.
- */
-export function awaitBrowserClick(
-  segment: HTMLElement,
-  onClicked: (isCancelled: boolean) => void,
-  pending: Set<() => void>,
-): void {
-  const view = segment.ownerDocument.defaultView;
-  if (view == null) {
-    return;
-  }
-  let isDone = false;
-  let stopSwallowing: (() => void) | null = null;
-  const end = () => {
-    isDone = true;
-    view.removeEventListener('click', grab, true);
-    view.clearTimeout(timer);
-    stopSwallowing?.();
-    pending.delete(end);
-  };
-  const finish = (isCancelled: boolean) => {
-    if (isDone) {
-      return;
-    }
-    isDone = true;
-    view.removeEventListener('click', grab, true);
-    view.clearTimeout(timer);
-    onClicked(isCancelled);
-  };
-  const grab = (event: MouseEvent) => {
-    if (!event.isTrusted || !segment.contains(event.target as Node | null)) {
-      return;
-    }
-    // The browser's click is the activation: the segment is not clicked
-    // again, even by a wait that ran out while the main thread was busy.
-    view.clearTimeout(timer);
-    // After every handler has run: was it cancelled?
-    view.setTimeout(() => {
-      finish(event.defaultPrevented);
-      pending.delete(end);
-    }, 0);
-  };
-  const timer = view.setTimeout(() => {
-    if (isDone) {
-      return;
-    }
-    view.removeEventListener('click', grab, true);
-    finish(clickAndReport(segment));
-    stopSwallowing = swallowLateClick(segment, () => pending.delete(end));
-  }, BROWSER_CLICK_WAIT_MS);
-  view.addEventListener('click', grab, true);
-  pending.add(end);
-}
-
-/**
- * Whether `event` is the browser's own late click on `segment` for the
- * activation the tracker already ran. A keyboard or assistive technology
- * activation (`detail === 0`) is never one, so it always passes.
- */
-export function isLateClick(
-  event: Pick<MouseEvent, 'isTrusted' | 'detail' | 'target'>,
-  segment: HTMLElement,
-): boolean {
-  return (
-    event.isTrusted &&
-    event.detail !== 0 &&
-    segment.contains(event.target as Node | null)
-  );
-}
-
-/**
- * After a direct click, the browser's own click for the same tap can still
- * come. A busy main thread can hold it past the wait. It is the same
- * activation, so it is swallowed before any handler sees it. This lasts only
- * until the next press or key.
- */
-function swallowLateClick(
-  segment: HTMLElement,
-  onStopped: () => void,
-): () => void {
-  const view = segment.ownerDocument.defaultView;
-  if (view == null) {
-    onStopped();
-    return () => {};
-  }
-  const stop = () => {
-    view.removeEventListener('click', swallow, true);
-    view.removeEventListener('pointerdown', stop, true);
-    view.removeEventListener('touchstart', stop, true);
-    view.removeEventListener('keydown', stop, true);
-    onStopped();
-  };
-  const swallow = (event: MouseEvent) => {
-    if (!isLateClick(event, segment)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    stop();
-  };
-  view.addEventListener('click', swallow, true);
-  view.addEventListener('pointerdown', stop, {capture: true, passive: true});
-  view.addEventListener('touchstart', stop, {capture: true, passive: true});
-  view.addEventListener('keydown', stop, true);
-  return stop;
-}
-
-/**
- * Clicks `segment` (its activation and every handler run) and reports
- * whether a handler cancelled the click.
- */
-function clickAndReport(segment: HTMLElement): boolean {
-  const view = segment.ownerDocument.defaultView;
-  let clicked: Event | null = null;
-  const grab = (event: Event) => {
-    if (clicked == null && event.target === segment) {
-      clicked = event;
-    }
-  };
-  view?.addEventListener('click', grab, true);
-  try {
-    segment.click();
-  } finally {
-    view?.removeEventListener('click', grab, true);
-  }
-  return (clicked as Event | null)?.defaultPrevented === true;
-}
-
 /** A ref to nothing: hooks given it attach nothing. */
 const DETACHED: RefObject<HTMLElement | null> = {current: null};
 
@@ -314,18 +170,8 @@ export function useSegmentedTouchTracking(
     },
     swallowsNativeClick: true,
   })));
-  /** Click waits still running: an unmount ends them. */
-  const pendingClicksRef = useRef<Set<() => void>>(new Set());
   // Ends the tracker's window listeners and any click wait on unmount.
-  useIsomorphicLayoutEffect(() => {
-    const pendingClicks = pendingClicksRef.current;
-    return () => {
-      tracker.dispose();
-      for (const end of [...pendingClicks]) {
-        end();
-      }
-    };
-  }, [tracker]);
+  useIsomorphicLayoutEffect(() => () => tracker.dispose(), [tracker]);
 
   // Every pointer type is tracked. A disabled control attaches nothing.
   const attachRef = isEnabled ? trackRef : DETACHED;
@@ -348,7 +194,7 @@ export function useSegmentedTouchTracking(
             bottom: rect.bottom,
           };
           tracker.begin(touch.x, touch.y);
-          motion.begin(track, tracker.beganOn);
+          motion.begin(track, tracker.beganOn, touch.pointerType === 'touch');
           break;
         }
         case 'touchUpInside':
@@ -363,14 +209,9 @@ export function useSegmentedTouchTracking(
             lifted != null &&
             lifted === tracker.beganOn;
           const value = motion.release(lifted);
-          if (value != null && isTap && lifted != null) {
+          if (value != null && isTap) {
             // A tap: the browser's own click commits it.
-            tracker.cancel();
-            awaitBrowserClick(
-              lifted,
-              isCancelled => motion.clicked(track, value, isCancelled),
-              pendingClicksRef.current,
-            );
+            tracker.endTap();
           } else if (value != null) {
             // No click comes from the browser for a drag: the segment's own
             // click, inside the lift's event; its onClick may veto it.

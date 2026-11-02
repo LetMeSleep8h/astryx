@@ -322,7 +322,7 @@ export function SegmentedControl({
 }: SegmentedControlProps) {
   const size = useSize(sizeProp, 'md');
   // A touch device (a coarse primary pointer) gets UIKit's motion: the
-  // selection slides on a spring. A mouse gets the theme's transitions.
+  // selection slides on a spring. A mouse's slides take the theme's timing.
   const isTouchPresentation = useTouchPresentation().isTouch;
   const trackRef = useRef<HTMLDivElement | null>(null);
   // Every pointer's press is tracked. A drag from the selected segment
@@ -456,7 +456,13 @@ export function SegmentedControl({
   return (
     <SegmentedControlContext value={contextValue}>
       <div
-        ref={useMergedRefs(ref, listRef, trackRef, disabledMessageTooltip.ref)}
+        ref={useMergedRefs(
+          ref,
+          listRef,
+          trackRef,
+          selection.trackRef,
+          disabledMessageTooltip.ref,
+        )}
         {...rest}
         role="radiogroup"
         aria-label={label}

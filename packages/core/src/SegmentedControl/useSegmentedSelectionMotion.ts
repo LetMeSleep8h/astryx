@@ -16,7 +16,15 @@
  * - /packages/core/src/SegmentedControl/useSegmentedTouchTracking.ts
  */
 
-import {useEffect, useRef, useState, type RefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefCallback,
+  type RefObject,
+} from 'react';
 import {
   createAnimator,
   type AnimateOptions,
@@ -156,6 +164,8 @@ interface Touch {
   readonly origin: HTMLElement | null;
   /** Whether it landed on the selected segment (a drag carries the lens). */
   readonly carriesLens: boolean;
+  /** A finger's press, not a mouse's or a pen's. */
+  readonly isTouch: boolean;
   /** The selected title's face and an unselected one, read at landing. */
   readonly faces: {
     readonly selected: TitleFace;
@@ -436,6 +446,11 @@ export interface SegmentedSelection {
    * is what commits, so a focus move it causes selects nothing.
    */
   readonly isPressing: () => boolean;
+  /**
+   * Attach to the radiogroup: it attaches the lens's animators and watches
+   * the control's size while the motion is enabled, and detaches on null.
+   */
+  readonly trackRef: RefCallback<HTMLElement>;
 }
 
 export interface SegmentedSelectionMotionOptions {
@@ -490,14 +505,16 @@ function defaultNow(): number {
  * - A cancelled touch puts the lens back.
  *
  * Under a mouse or a pen, the same press commits the same segment, but the
- * theme owns the timing. A click, a key or a new value keeps the theme's
- * color transition, with no lens. A drag from the selected segment carries
- * the lens on the pointer itself. Its lift settles on the theme's duration
- * and easing, as the segments' own transition does.
+ * theme owns the timing. A click, a key or a new value slides the lens on
+ * the theme's duration and easing, as the segments' own transition does. A
+ * drag from the selected segment carries the lens on the pointer itself, and
+ * its lift settles on the same timing.
  *
- * Under Reduced Motion, nothing chases, travels or scales. The lens fades in
- * at the new segment while ::after, painted with the old surface, fades out
- * in place.
+ * Under Reduced Motion, a drag still carries the lens with the pointer, as
+ * direct movement does. Nothing else travels or scales: a change, and a
+ * drag's release, fade the lens in at the new segment while ::after, painted
+ * with the old surface, fades out in place. On a fine pointer the animator
+ * makes that change at once.
  */
 export class SegmentedSelectionMotion {
   private track: HTMLElement | null = null;
@@ -548,6 +565,12 @@ export class SegmentedSelectionMotion {
   private isAwaitingValue = false;
   /** The motion a release starts once its commit's click has run. */
   private pending: Pending | null = null;
+  /**
+   * The last release was a finger's. Under Reduced Motion the change it
+   * starts fades on any primary pointer; a mouse's follows the primary
+   * pointer.
+   */
+  private isTouchRelease = true;
   /** The ::after shows the leaving surface (Reduced Motion). */
   private isLeavingShown = false;
   /** Bumped by every leaving fade; a finished fade clears only its own. */
@@ -647,12 +670,6 @@ export class SegmentedSelectionMotion {
       }
       return;
     }
-    if (!this.isPresenting) {
-      // A click, a key or a new value under a fine pointer: the theme's
-      // transition shows the change.
-      this.settle();
-      return;
-    }
     if (destination == null) {
       // Nothing is selected any more: no surface to carry.
       this.settle();
@@ -673,13 +690,14 @@ export class SegmentedSelectionMotion {
       this.crossFadeTo(destination, to_, from_, destination, false);
       return;
     }
+    if (!this.isPresenting) {
+      // Before the surface is borrowed: it must not fade out.
+      this.stillTransitions();
+    }
     const at = this.carry(destination, to_, from_, destination);
-    // A programmatic or keyboard change: the whole box on the slide spring.
-    this.springLens(
-      {x: 0, scaleX: 1, scaleY: 1},
-      this.springFrom({x: 0, scaleX: 1, scaleY: 1}, 'selection'),
-      {at},
-    );
+    // A programmatic or keyboard change: the whole box on the slide spring
+    // under a finger, on the theme's timing under a fine pointer.
+    this.settleLens(destination, {at});
   }
 
   /**
@@ -687,7 +705,7 @@ export class SegmentedSelectionMotion {
    * resolved for it (null: none): the track's geometry and title faces, read
    * once.
    */
-  begin(track: HTMLElement, origin: HTMLElement | null): void {
+  begin(track: HTMLElement, origin: HTMLElement | null, isTouch = true): void {
     const segments = segmentsOf(track);
     const boxOf = boxesIn(track);
     const boxes = new Map(segments.map(segment => [segment, boxOf(segment)]));
@@ -712,6 +730,7 @@ export class SegmentedSelectionMotion {
       boxes,
       origin,
       carriesLens,
+      isTouch,
       faces,
     };
   }
@@ -736,17 +755,11 @@ export class SegmentedSelectionMotion {
 
   /**
    * The first move of a drag from the selected segment binds the lens there,
-   * at its resting size. Reduced Motion: nothing chases, so nothing is held
-   * (the lens stays parked until the release cross-fades).
+   * at its resting size. Under Reduced Motion too: a drag is direct movement.
    */
   private hold(): void {
     const touch = this.touch;
-    if (
-      touch == null ||
-      touch.origin == null ||
-      this.isHeld ||
-      this.animator.reducedMotion() !== 'off'
-    ) {
+    if (touch == null || touch.origin == null || this.isHeld) {
       return;
     }
     const box = touch.boxes.get(touch.origin) as Box;
@@ -831,18 +844,16 @@ export class SegmentedSelectionMotion {
       Math.max(touch.toTrackX(clientX), Math.min(...centers) - reach),
       Math.max(...centers) + reach,
     );
-    if (!this.isPresenting) {
-      // A mouse or a pen holds the lens directly. Each move writes the
-      // pointer's position. The theme times only what the pointer does not
-      // hold.
+    if (!this.isPresenting || this.animator.reducedMotion() !== 'off') {
+      // A mouse or a pen holds the lens directly, and so does a finger under
+      // Reduced Motion. Each move writes the pointer's position. Only what
+      // the pointer does not hold is timed.
       this.animator.set({x: target - center(carried.box)});
       return;
     }
-    // The center chases the finger, and the size stays at rest. Each chase
-    // starts explicitly at the call. A call from rest otherwise waits for the
-    // browser to start it. Android Chrome sends one touch move per frame, so
-    // the next move arrived before that start was known. Every move then
-    // restarted the chase from rest, and the lens stuck to its segment.
+    // The center chases the finger, and the size stays at rest. Start each
+    // chase at the call. A chase from rest waits for the browser to start it.
+    // Android Chrome sends the next move first, so the lens would stick.
     const at = this.now();
     this.springLens(
       {x: target - center(carried.box)},
@@ -888,6 +899,7 @@ export class SegmentedSelectionMotion {
       this.clearFaces();
     }
     const isHeld = touch.carriesLens && this.isHeld;
+    this.isTouchRelease = touch.isTouch;
     this.committed = value;
     this.isAwaitingValue = false;
     if (value == null) {
@@ -899,11 +911,9 @@ export class SegmentedSelectionMotion {
     }
     // The commit follows at once, through the segment's click; the lens
     // moves once it has run, on the box the destination has then. A held
-    // lens settles there; a tap (or a drag that started elsewhere) slides
-    // there from the selected segment.
-    // Under a fine pointer only a held lens moves: a click's change, or a
-    // drag's from elsewhere, shows through the theme's transition.
-    if (isHeld || (selected != null && this.isPresenting)) {
+    // lens settles there; a tap or a click (or a drag that started
+    // elsewhere) slides there from the selected segment.
+    if (isHeld || selected != null) {
       this.pending = {
         destination,
         box,
@@ -1326,17 +1336,26 @@ export class SegmentedSelectionMotion {
       this.settle();
       return;
     }
-    if (this.animator.reducedMotion({touchRelease: true}) !== 'off') {
-      // A touch released it (or declined its commit): it fades on any
-      // pointer.
-      this.crossFadeTo(segment, box, null, this.carried?.hidden ?? paint, true);
+    const touchRelease = this.isTouchRelease;
+    if (this.animator.reducedMotion({touchRelease}) !== 'off') {
+      // A finger's release (or its declined commit) fades on any pointer.
+      this.crossFadeTo(
+        segment,
+        box,
+        null,
+        this.carried?.hidden ?? paint,
+        touchRelease,
+      );
       return;
     }
     const at = this.carry(segment, box, null, this.carried?.hidden ?? paint);
     this.settleLens(segment, {at});
   }
 
-  /** A tap's slide: from `from` to `segment` on the slide spring. */
+  /**
+   * A tap's or a click's slide: from `from` to `segment`, on the slide spring
+   * under a finger and on the theme's timing under a fine pointer.
+   */
   private slideTo(
     segment: HTMLElement,
     box: Box,
@@ -1347,16 +1366,21 @@ export class SegmentedSelectionMotion {
       this.settle();
       return;
     }
-    if (this.animator.reducedMotion({touchRelease: true}) !== 'off') {
-      // A tap's release: no travel; it fades on any pointer.
+    const touchRelease = this.isTouchRelease;
+    if (this.animator.reducedMotion({touchRelease}) !== 'off') {
+      // A release: no travel. A finger's fades on any pointer.
       this.crossFadeTo(
         segment,
         box,
         this.carried == null ? from : null,
         this.carried?.hidden ?? paint,
-        true,
+        touchRelease,
       );
       return;
+    }
+    if (!this.isPresenting) {
+      // Before the surface is borrowed: it must not fade out.
+      this.stillTransitions();
     }
     const at = this.carry(
       segment,
@@ -1583,14 +1607,6 @@ export function useSegmentedSelectionMotion(
   }, [isPresenting, motion]);
 
   useIsomorphicLayoutEffect(() => {
-    if (!isEnabled) {
-      return undefined;
-    }
-    motion.attachTrack(trackRef.current);
-    return () => motion.attachTrack(null);
-  }, [isEnabled, motion, trackRef]);
-
-  useIsomorphicLayoutEffect(() => {
     const from = previousValueRef.current;
     previousValueRef.current = value;
     const track = trackRef.current;
@@ -1602,14 +1618,22 @@ export function useSegmentedSelectionMotion(
 
   // The lens aims at boxes measured when its motion began: if the control
   // resizes under it, hand the surface back rather than land somewhere stale.
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!isEnabled || track == null) {
-      motion.settle();
-      return;
-    }
-    return observeResize(track, () => motion.resized(track));
-  }, [isEnabled, motion, trackRef]);
+  // A change of `isEnabled` makes a new callback, so React detaches the old
+  // one and attaches the node again.
+  const attachTrack = useCallback(
+    (track: HTMLElement | null) => {
+      if (track == null || !isEnabled) {
+        return undefined;
+      }
+      motion.attachTrack(track);
+      const stopObserving = observeResize(track, () => motion.resized(track));
+      return () => {
+        stopObserving();
+        motion.attachTrack(null);
+      };
+    },
+    [isEnabled, motion],
+  );
 
   // Stops the animators that drive the radiogroup's pseudo-elements.
   useEffect(() => () => motion.stop(), [motion]);
@@ -1618,8 +1642,8 @@ export function useSegmentedSelectionMotion(
   // the pointer, through that segment's click.
   useSegmentedTouchTracking(trackRef, motion, isTracking);
 
-  const [selection] = useState<SegmentedSelection>(() => ({
-    isPressing: () => motion.isPressed,
-  }));
-  return selection;
+  return useMemo<SegmentedSelection>(
+    () => ({isPressing: () => motion.isPressed, trackRef: attachTrack}),
+    [attachTrack, motion],
+  );
 }
