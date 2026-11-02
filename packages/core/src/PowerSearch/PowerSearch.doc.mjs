@@ -140,7 +140,8 @@ export const docs = {
     {
       name: 'timezoneID',
       type: 'string',
-      description: 'Timezone ID for date formatting (e.g. "America/New_York").',
+      description:
+        'Timezone ID for date formatting (e.g. "America/New_York"). Date values are written in the InternationalizationProvider calendar, such as calendar="persian"; filter values stay Unix seconds.',
     },
     {
       name: 'handleRef',
@@ -409,7 +410,8 @@ export const docsZh = {
     {
       name: 'timezoneID',
       type: 'string',
-      description: '用于日期格式化的时区 ID（例如 "America/New_York"）。',
+      description:
+        '用于日期格式化的时区 ID（例如 "America/New_York"）。日期值使用 InternationalizationProvider 的历法（如 calendar="persian"）显示；筛选值仍为 Unix 秒数。',
     },
     {
       name: 'handleRef',
@@ -522,7 +524,8 @@ export const docsDense = {
       'Max ranked results for a non-empty query; excludes value editors.',
     menuWidth: 'Main field/search menu width in pixels.',
     popoverSaveButtonLabel: 'Label for save button in edit popover.',
-    timezoneID: 'Timezone ID for date formatting (e.g. "America/New_York").',
+    timezoneID:
+      'Timezone ID for date formatting (e.g. "America/New_York"); dates show in the provider calendar',
     handleRef:
       'Imperative handle w/ focusTypeahead() + blurTypeahead() methods.',
     endContent:
