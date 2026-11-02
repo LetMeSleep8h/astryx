@@ -1488,7 +1488,11 @@ Rejected: classifying every documented auxiliary button's disappearance as break
 ### DEC-31 — Canaries publish at most hourly from main's tip
 
 **Reference:** `spec:AST-017/DEC-31`
-**Decider:** `cixzhang`, `2026-11-02`
+**Decider:** release-policy owners, `2026-11-01`
+
+Release policy belongs to the release-policy owners. Their decision: canaries
+publish at most hourly from main's tip, and a release owner can publish one from
+main on demand.
 
 A canary at most an hour behind main serves the people who install `@canary` as
 well as one per commit does. Every canary adds a version to each package's npm
