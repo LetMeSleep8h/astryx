@@ -219,6 +219,7 @@ describe('motion roles', () => {
     expect(
       Object.fromEntries(discoveredRoles().map(role => [role.id, role.kind])),
     ).toMatchObject({
+      'segmented.selectionSpring': 'spring',
       'springs.contextMenuDismiss': 'spring',
       'springs.contextMenuLift': 'spring',
       'springs.contextMenuMorph': 'spring',

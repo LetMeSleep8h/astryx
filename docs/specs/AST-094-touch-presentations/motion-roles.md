@@ -6,6 +6,7 @@ Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind
 
 | Role                         | Kind     | Default                             | Named by           |
 | ---------------------------- | -------- | ----------------------------------- | ------------------ |
+| `segmented.selectionSpring`  | spring   | response 0.4 s, damping ratio 0.85  | `spec:AST-094` FR4 |
 | `springs.contextMenuDismiss` | spring   | response 0.35 s, damping ratio 0.85 | `spec:AST-094` FR4 |
 | `springs.contextMenuLift`    | spring   | response 0.32 s, damping ratio 0.8  | `spec:AST-094` FR4 |
 | `springs.contextMenuMorph`   | spring   | response 0.3 s, damping ratio 0.8   | `spec:AST-094` FR4 |
