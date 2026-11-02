@@ -79,7 +79,7 @@ import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
 import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
-import {isStatusInvalid} from '../InputGroup/InputGroupContext';
+import {useIsMemberInvalid} from '../InputGroup/InputGroupInternalContext';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
@@ -624,6 +624,7 @@ export function TouchDateField({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const mergedInputRef = useMergedRefs(ref, inputRef);
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -1308,7 +1309,7 @@ export function TouchDateField({
         }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={isStatusInvalid(status, inputGroup) ? 'true' : undefined}
+        aria-invalid={isMemberInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={isSheetOpen}
         aria-haspopup="dialog"

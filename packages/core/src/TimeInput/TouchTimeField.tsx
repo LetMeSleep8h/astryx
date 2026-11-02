@@ -38,7 +38,8 @@ import {
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
 } from '../Field';
-import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
+import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {useIsMemberInvalid} from '../InputGroup/InputGroupInternalContext';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
@@ -248,6 +249,7 @@ export function TouchTimeField({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const mergedInputRef = useMergedRefs(ref, inputRef);
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -509,7 +511,7 @@ export function TouchTimeField({
         aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={isStatusInvalid(status, inputGroup) ? 'true' : undefined}
+        aria-invalid={isMemberInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={isSheetOpen}
         aria-haspopup="dialog"

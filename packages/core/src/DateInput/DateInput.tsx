@@ -45,8 +45,11 @@ import {
 } from '../Field';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -563,6 +566,7 @@ function PointerDateField({
   const calendarRef = useRef<CalendarHandle | null>(null);
   const lastFiredValueRef = useRef<ISODateString | undefined>(undefined);
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -988,11 +992,7 @@ function PointerDateField({
         }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          isStatusInvalid(status, inputGroup) || !isInputValid
-            ? 'true'
-            : undefined
-        }
+        aria-invalid={isMemberInvalid || !isInputValid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}
         aria-haspopup="dialog"
