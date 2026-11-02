@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -177,20 +177,142 @@ function runStablePublish({failingPackage = '', failOnce = ''} = {}) {
   }
 }
 
+const STABLE_INPUTS = [
+  'release-branch',
+  'release-version',
+  'release-tag',
+  'expected-head',
+  'plan-digest',
+];
+
+/*
+ * Runs the canary's "already has its canary" step against a local registry
+ * stand-in that answers every request with `status` (`000` drops the
+ * connection), and returns the step's `publish=` output.
+ */
+async function runFreshCheck(status) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-canary-fresh-'));
+  const server = spawn(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `import http from 'node:http';
+const status = process.argv[1];
+const server = http.createServer((request, response) => {
+  if (status === '000') return request.socket.destroy();
+  response.writeHead(Number(status)).end('{}');
+});
+server.listen(0, '127.0.0.1', () => console.log(server.address().port));`,
+      status,
+    ],
+    {stdio: ['ignore', 'pipe', 'inherit']},
+  );
+  try {
+    const port = await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.stdout.once('data', data => resolve(String(data).trim()));
+    });
+    writeJson(root, 'packages/core/package.json', {
+      name: '@astryxdesign/core',
+      version: '0.7.8',
+    });
+    const registryFile = path.join(root, 'scripts/npm/registry.mjs');
+    fs.mkdirSync(path.dirname(registryFile), {recursive: true});
+    fs.copyFileSync(path.join(ROOT, 'scripts/npm/registry.mjs'), registryFile);
+    const githubOutput = path.join(root, 'github-output');
+    fs.writeFileSync(githubOutput, '');
+    const result = spawnSync(
+      'bash',
+      ['-c', step(canary, 'Skip a tip that already has its canary').run],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          ASTRYX_PUBLISH_REGISTRY: `http://127.0.0.1:${port}`,
+          GITHUB_OUTPUT: githubOutput,
+          GITHUB_SHA: 'abcdef1234567890',
+        },
+      },
+    );
+    expect(result.status).toBe(0);
+    return fs.readFileSync(githubOutput, 'utf8').trim();
+  } finally {
+    server.kill();
+    fs.rmSync(root, {recursive: true, force: true});
+  }
+}
+
 describe('stable and canary publication authority', () => {
-  it('keeps stable explicit and canary limited to main pushes', () => {
-    expect(stable.if).toBe("github.event_name == 'workflow_dispatch'");
-    expect(canary.if).toBe("github.event_name == 'push'");
-    expect(workflow.on.push.branches).toEqual(['main']);
-    for (const name of [
-      'release-branch',
-      'release-version',
-      'release-tag',
-      'expected-head',
-      'plan-digest',
-    ]) {
-      expect(workflow.on.workflow_dispatch.inputs[name].required).toBe(true);
+  it('keeps stable explicit and runs canaries hourly or on demand, never on each push', () => {
+    expect(stable.if).toBe(
+      "github.event_name == 'workflow_dispatch' && inputs.channel != 'canary'",
+    );
+    expect(canary.if).toBe(
+      "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.channel == 'canary')",
+    );
+    expect(workflow.on.push).toBeUndefined();
+    expect(workflow.on.schedule).toEqual([{cron: '17 * * * *'}]);
+    expect(workflow.on.workflow_dispatch.inputs.channel).toMatchObject({
+      type: 'choice',
+      options: ['stable', 'canary'],
+      default: 'stable',
+    });
+    // Optional only so a canary dispatch can omit them: the stable job's
+    // first step requires every one.
+    const guard = stable.steps[0];
+    expect(guard.name).toBe('Require every stable release input');
+    for (const name of STABLE_INPUTS) {
+      expect(workflow.on.workflow_dispatch.inputs[name].required).toBe(false);
+      expect(JSON.stringify(guard.env)).toContain(`inputs['${name}']`);
     }
+  });
+
+  it('refuses a stable dispatch that leaves out any release input', () => {
+    const complete = {
+      RELEASE_BRANCH: 'release/v0.7.7',
+      RELEASE_VERSION: '0.7.7',
+      RELEASE_TAG: 'v0.7.7',
+      EXPECTED_HEAD: 'a'.repeat(40),
+      PLAN_DIGEST: 'b'.repeat(64),
+    };
+    const run = env =>
+      spawnSync(
+        'bash',
+        ['-c', step(stable, 'Require every stable release input').run],
+        {
+          encoding: 'utf8',
+          env: {...process.env, ...env},
+        },
+      );
+
+    expect(run(complete).status).toBe(0);
+    const missing = run({...complete, RELEASE_TAG: '', PLAN_DIGEST: ''});
+    expect(missing.status).toBe(1);
+    expect(missing.stdout).toContain('missing: release-tag plan-digest');
+  });
+
+  it('publishes canaries only from main', () => {
+    const run = ref =>
+      spawnSync('bash', ['-c', step(canary, 'Require main').run], {
+        encoding: 'utf8',
+        env: {...process.env, GITHUB_REF: ref},
+      });
+    expect(
+      canary.steps.map(candidate => candidate.name).indexOf('Require main'),
+    ).toBe(1);
+    expect(run('refs/heads/main').status).toBe(0);
+    const branch = run('refs/heads/feature');
+    expect(branch.status).toBe(1);
+    expect(branch.stdout).toContain('Canaries publish only from main');
+  });
+
+  it("publishes nothing when main's tip already has its canary, and publishes on any other answer", async () => {
+    expect(await runFreshCheck('200')).toBe('publish=false');
+    expect(await runFreshCheck('404')).toBe('publish=true');
+    expect(await runFreshCheck('503')).toBe('publish=true');
+    expect(await runFreshCheck('000')).toBe('publish=true');
   });
 
   it('binds stable publication to marker, tag, branch, head, version, and plan', () => {
@@ -282,9 +404,12 @@ describe('stable and canary publication authority', () => {
       'Prune old canary versions',
     ]) {
       expect(step(canary, name).if).toBe(
-        "steps.canary-scope.outputs.publish == 'true'",
+        "steps.fresh.outputs.publish == 'true'",
       );
     }
+    expect(step(canary, 'Skip a tip that already has its canary').if).toBe(
+      "steps.canary-scope.outputs.publish == 'true'",
+    );
     const publish = step(canary, 'Publish canary versions').run;
     expect(publish).toContain(
       'DECLARED_VERSION=$(node -p "require(\'./packages/core/package.json\').version")',
