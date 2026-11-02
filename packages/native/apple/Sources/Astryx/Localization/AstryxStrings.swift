@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import AstryxNative
 import Foundation
 
 /// Core's catalog messages, read from `Resources/<locale>.lproj`, which
@@ -29,6 +30,43 @@ enum AstryxStrings {
       rest = rest[rest.index(after: close)...]
     }
     return result + rest
+  }
+
+  /// What a busy view announces when it starts loading.
+  static var spinnerLoading: String { localized("@astryx.spinner.loading", "Loading") }
+  /// A thumbnail's name when it has no alt or label.
+  static var thumbnailFallbackName: String { localized("@astryx.thumbnail.fallbackName", "Thumbnail") }
+  /// The name of a thumbnail's open button.
+  static func thumbnailOpen(_ accessibleName: String) -> String {
+    fill(localized("@astryx.thumbnail.open", "Open {accessibleName}"), ["accessibleName": accessibleName])
+  }
+  /// The name of a thumbnail's remove button.
+  static func thumbnailRemove(_ accessibleName: String) -> String {
+    fill(localized("@astryx.thumbnail.remove", "Remove {accessibleName}"), ["accessibleName": accessibleName])
+  }
+
+  /// The indicator after an optional field's label.
+  static var fieldOptional: String { localized("@astryx.field.optional", "Optional") }
+  /// What VoiceOver reads for a read-only field, which SwiftUI cannot mark.
+  static var inputReadOnly: String { localized("@astryx.input.readOnly", "Read only") }
+  /// The indicator after a required field's label.
+  static var fieldRequired: String { localized("@astryx.field.required", "Required") }
+  /// The hover and pointer tip on an input's clear button.
+  static var clearTooltip: String { localized("@astryx.inputClearButton.tooltip", "Clear") }
+
+  /// The clear button's accessible name, naming the field.
+  static func clearLabel(_ label: String) -> String {
+    localized("@astryx.textInput.clearLabel", "Clear {label}").replacingOccurrences(of: "{label}", with: label)
+  }
+
+  /// The accessible name of an input's status button when its message shows
+  /// in a tip.
+  static func statusButton(_ type: TextInputStatusType) -> String {
+    switch type {
+    case .error: localized("@astryx.input.statusButton.error", "Error details")
+    case .warning: localized("@astryx.input.statusButton.warning", "Warning details")
+    case .success: localized("@astryx.input.statusButton.success", "Success details")
+    }
   }
 
   static func localized(_ key: String, _ english: String) -> String {
