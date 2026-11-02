@@ -660,9 +660,11 @@ one removal merged ahead of the decision to allow it.
   cut. Canary publication owns that ordering boundary instead: the fixed group MUST
   declare one plain version; a declaration strictly above the newest stable tag
   publishes `<declared version>-canary.<commit>`, equality publishes nothing, and a
-  lower or split declaration fails rather than publishing. Changeset admission still
-  refuses `[breaking]` work while main declares a patch and admits it while main
-  declares the minor successor.
+  lower or split declaration fails rather than publishing. Canary publication runs at
+  most hourly from main's tip, and on demand from main; a tip that already has its
+  canary publishes nothing (DEC-31). Changeset admission still refuses `[breaking]`
+  work while main declares a patch and admits it while main declares the minor
+  successor.
 - **FR47 — A release branch releases the declared version.** A release branch's
   version is the fixed-group version declared at its cut commit. Admission, the
   release plan, Changeset consumption, changelog generation, and stable
@@ -1482,6 +1484,20 @@ FR3 defines the conditions for patch-compatible adaptation and its limits;
 button visibility is not independently frozen when those conditions hold.
 
 Rejected: classifying every documented auxiliary button's disappearance as breaking despite preserved numeric entry and caller contracts.
+
+### DEC-31 — Canaries publish at most hourly from main's tip
+
+**Reference:** `spec:AST-017/DEC-31`
+**Decider:** `cixzhang`, `2026-11-02`
+
+A canary at most an hour behind main serves the people who install `@canary` as
+well as one per commit does. Every canary adds a version to each package's npm
+document, and a large document slows how quickly npm serves a new version,
+stable releases included. A release owner can still publish a canary from main
+on demand, for example to prove the publish path before a cut. Stable
+publication never waits for a canary.
+
+Rejected: a canary for every commit that reaches main.
 
 ## Open questions
 
