@@ -13,6 +13,7 @@ import React from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Token} from '../Token';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {fontWeightVars} from '../theme/tokens.stylex';
 import {formatFilterValue} from './formatFilterValue';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
@@ -46,6 +47,7 @@ export function PowerSearchToken({
   const config = useInternalConfig(configProp);
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearchToken');
 
   const fieldLabel = field.label;
   const resolvedOperatorLabel = resolveOperatorLabel(operator, t);
@@ -66,6 +68,8 @@ export function PowerSearchToken({
     adjustedMaxLength,
     t,
     locale,
+    undefined,
+    calendar,
   );
 
   const valueContent = valueStr ? (

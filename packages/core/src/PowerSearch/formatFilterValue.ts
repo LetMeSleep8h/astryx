@@ -2,7 +2,7 @@
 
 /**
  * @file formatFilterValue.ts
- * @input OperatorValue, FilterValue, config
+ * @input OperatorValue, FilterValue, config, locale, time zone, calendar
  * @output Formatted display string for a filter value
  * @position Pure utility; consumed by PowerSearch token rendering
  *
@@ -13,6 +13,7 @@
 import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {Locale, TranslatorFn} from '../i18n';
+import type {CalendarSystem} from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
@@ -40,6 +41,7 @@ export function formatDateAbsolute(
   unixSeconds: number,
   locale: Locale,
   timezoneID?: string,
+  calendar: CalendarSystem = 'gregory',
 ): string {
   const options: Intl.DateTimeFormatOptions = {
     year: 'numeric',
@@ -48,7 +50,7 @@ export function formatDateAbsolute(
     hour: 'numeric',
     minute: '2-digit',
     ...(timezoneID ? {timeZone: timezoneID} : {}),
-    calendar: 'gregory',
+    calendar,
   };
   return new Intl.DateTimeFormat(locale, options).format(unixSeconds * 1000);
 }
@@ -63,12 +65,13 @@ export function formatDateAbsolute(
 export function formatDateAbsoluteCompact(
   unixSeconds: number,
   locale: Locale,
+  calendar: CalendarSystem = 'gregory',
 ): string {
   return new Intl.DateTimeFormat(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    calendar: 'gregory',
+    calendar,
   }).format(unixSeconds * 1000);
 }
 
@@ -84,6 +87,11 @@ function formatDateRange(
   return t('@astryx.powersearch.valueEditor.dateRange');
 }
 
+/**
+ * The display text of a filter value. A `date_absolute` value is written in
+ * `calendar`, which defaults to Gregorian; PowerSearch passes the calendar that
+ * its provider resolves.
+ */
 export function formatFilterValue(
   _config: InternalConfig,
   operatorValue: OperatorValue,
@@ -92,6 +100,7 @@ export function formatFilterValue(
   t: TranslatorFn,
   locale: Locale,
   timezoneID?: string,
+  calendar: CalendarSystem = 'gregory',
 ): string {
   switch (filterValue.type) {
     case 'empty':
@@ -188,7 +197,12 @@ export function formatFilterValue(
 
     case 'date_absolute':
       return truncate(
-        formatDateAbsolute(filterValue.unixSeconds, locale, timezoneID),
+        formatDateAbsolute(
+          filterValue.unixSeconds,
+          locale,
+          timezoneID,
+          calendar,
+        ),
         maxLength,
       );
 

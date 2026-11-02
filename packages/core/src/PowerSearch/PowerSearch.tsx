@@ -60,7 +60,9 @@ import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {themeProps} from '../utils/themeProps';
 import {truncateCharacters} from '../utils/characters';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {Locale} from '../i18n/types';
+import type {CalendarSystem} from '../utils/calendarSystem';
 import type {
   PowerSearchConfig,
   PowerSearchFilter,
@@ -161,11 +163,13 @@ function PowerSearchTokenValue({
   filterValue,
   maxLength,
   locale,
+  calendar,
 }: {
   operatorValue: OperatorValue;
   filterValue: FilterValue;
   maxLength: number;
   locale: Locale;
+  calendar: CalendarSystem;
 }) {
   switch (filterValue.type) {
     case 'empty':
@@ -310,6 +314,7 @@ function PowerSearchTokenValue({
       const formatted = formatDateAbsoluteCompact(
         filterValue.unixSeconds,
         locale,
+        calendar,
       );
       return (
         <span {...stylex.props(tokenValueStyles.value)}>
@@ -595,6 +600,7 @@ export function PowerSearch({
   const searchSource = usePowerSearchSource(config, maxSearchResults);
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearch');
   const label = labelFromProps ?? t('@astryx.powersearch.label');
   const placeholder =
     placeholderFromProps ?? t('@astryx.powersearch.placeholder');
@@ -666,6 +672,7 @@ export function PowerSearch({
             t,
             locale,
             timezoneID,
+            calendar,
           )
         : '';
 
@@ -684,7 +691,7 @@ export function PowerSearch({
         },
       };
     });
-  }, [filters, config, maxTokenLength, timezoneID, t, locale]);
+  }, [filters, config, maxTokenLength, timezoneID, t, locale, calendar]);
 
   // Handle tokenizer onChange (field selected from typeahead)
   const handleTokenizerChange = useCallback(
@@ -888,6 +895,7 @@ export function PowerSearch({
             filterValue={filter.value}
             maxLength={adjustedMaxLength}
             locale={locale}
+            calendar={calendar}
           />
         ) : undefined;
 
@@ -936,6 +944,7 @@ export function PowerSearch({
       configProp,
       maxTokenLength,
       locale,
+      calendar,
       size,
       isReadOnly,
       isDisabled,
