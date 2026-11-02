@@ -16,7 +16,10 @@ import userEvent from '@testing-library/user-event';
 import {Calendar} from './Calendar';
 import {DateInput} from '../DateInput/DateInput';
 import {DateRangeInput} from '../DateRangeInput/DateRangeInput';
-import {DateTimeInput} from '../DateTimeInput/DateTimeInput';
+import {
+  DateTimeInput,
+  type ISODateTimeString,
+} from '../DateTimeInput/DateTimeInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
@@ -354,7 +357,7 @@ describe('date inputs under a provider calendar', () => {
       <DateTimeInput
         key="dt"
         label="When"
-        value="2026-10-30T09:00"
+        value={'2026-10-30T09:00' as ISODateTimeString}
         onChange={() => {}}
       />,
     ],

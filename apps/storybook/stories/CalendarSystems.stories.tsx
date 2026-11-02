@@ -200,6 +200,17 @@ export const BuddhistThai = story(
   'Buddhist years on Gregorian months. No Temporal is needed.',
 );
 
+export const Iso8601 = story(
+  {
+    title: 'ISO 8601, English',
+    locale: 'en',
+    calendar: 'iso8601',
+    value: '2026-10-30',
+    weekStartsOn: 'mon',
+  },
+  'The ISO 8601 calendar has Gregorian months and uses Gregorian month names.',
+);
+
 const styles = stylex.create({
   panel: {
     display: 'flex',
