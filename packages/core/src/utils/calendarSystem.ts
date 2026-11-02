@@ -13,8 +13,10 @@
 import type {Locale} from '../i18n/types';
 import type {PlainDate} from './dateTypes';
 import {
+  dateTimeFormatFor,
   plainDateAddDays,
   plainDateAddMonths,
+  plainDateFormat,
   plainDateFormatStandaloneMonthYear,
   plainDateIsAfter,
   plainDateIsBefore,
@@ -274,18 +276,125 @@ export function formatCalendarMonthLabel(
   return plainDateFormatStandaloneMonthYear(
     plainDateAddDays(month.start, Math.floor(month.length / 2)),
     locale,
-    calendar,
+    labelCalendar(calendar),
   );
+}
+
+// Intl has no month names for `iso8601`. It drops the month or orders the
+// fields oddly, so labels use `gregory`, which has the same months and days.
+function labelCalendar(calendar: CalendarSystem): CalendarSystem {
+  return calendar === 'iso8601' ? 'gregory' : calendar;
+}
+
+function utcMidnight(pd: PlainDate): number {
+  const date = new Date(0);
+  date.setUTCFullYear(pd.year, pd.month - 1, pd.day);
+  return date.getTime();
+}
+
+function formatToParts(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  return dateTimeFormatFor(locale, {
+    ...options,
+    calendar,
+    timeZone: 'UTC',
+  }).formatToParts(utcMidnight(pd));
+}
+
+const MONTH_PART_TYPES: ReadonlySet<string> = new Set([
+  'era',
+  'year',
+  'relatedYear',
+  'yearName',
+  'month',
+]);
+
+function monthPartsKey(parts: Intl.DateTimeFormatPart[]): string {
+  return parts
+    .filter(part => MONTH_PART_TYPES.has(part.type))
+    .map(part => part.value)
+    .join('|');
+}
+
+/**
+ * Formats a Gregorian date in the calendar, such as "Friday, Aban 8, 1405 AP".
+ * The label always names the month and day that the grid shows. Intl and the
+ * runtime's Temporal can disagree on a Chinese or Korean month start; the
+ * label then takes its month and year from the middle of the Temporal month,
+ * its day from Temporal, and its weekday from the date.
+ */
+export function formatCalendarDate(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): string {
+  if (isGregorianAligned(calendar)) {
+    return plainDateFormat(
+      pd,
+      {...options, calendar: labelCalendar(calendar)},
+      locale,
+    );
+  }
+  const date = inCalendar(calendar, pd);
+  const parts = formatToParts(calendar, pd, options, locale);
+  const middle = plainDateAddDays(
+    pd,
+    Math.floor(date.daysInMonth / 2) - (date.day - 1),
+  );
+  const middleParts = formatToParts(calendar, middle, options, locale);
+  const intlDay = formatToParts(
+    calendar,
+    pd,
+    {day: 'numeric'},
+    'en-u-nu-latn',
+  ).find(part => part.type === 'day')?.value;
+  if (
+    Number(intlDay) === date.day &&
+    monthPartsKey(parts) === monthPartsKey(middleParts)
+  ) {
+    return parts.map(part => part.value).join('');
+  }
+  const {numberingSystem} = dateTimeFormatFor(locale, {
+    ...options,
+    calendar,
+    timeZone: 'UTC',
+  }).resolvedOptions();
+  const weekday = parts.find(part => part.type === 'weekday')?.value;
+  return middleParts
+    .map(part =>
+      part.type === 'day'
+        ? formatDayNumber(date.day, locale, numberingSystem)
+        : part.type === 'weekday' && weekday != null
+          ? weekday
+          : part.value,
+    )
+    .join('');
 }
 
 const dayNumberFormats = new Map<string, Intl.NumberFormat>();
 
-/** A day of the month written in the locale's digits, such as ۸ in `fa`. */
-export function formatDayNumber(day: number, locale: Locale): string {
-  let format = dayNumberFormats.get(locale);
+/**
+ * A day of the month written in the locale's digits, such as ۸ in `fa`, or in
+ * the given numbering system.
+ */
+export function formatDayNumber(
+  day: number,
+  locale: Locale,
+  numberingSystem?: string,
+): string {
+  const key = `${locale}|${numberingSystem ?? ''}`;
+  let format = dayNumberFormats.get(key);
   if (format == null) {
-    format = new Intl.NumberFormat(locale, {useGrouping: false});
-    dayNumberFormats.set(locale, format);
+    format = new Intl.NumberFormat(locale, {
+      useGrouping: false,
+      numberingSystem,
+    });
+    dayNumberFormats.set(key, format);
   }
   return format.format(day);
 }

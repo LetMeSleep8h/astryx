@@ -11,6 +11,7 @@ import {
   calendarMonthOf,
   calendarShiftMonths,
   calendarShiftYears,
+  formatCalendarDate,
   formatCalendarMonthLabel,
   formatDayNumber,
   isCalendarSystemAvailable,
@@ -18,6 +19,7 @@ import {
   isInCalendarMonth,
 } from './calendarSystem';
 import {
+  DATE_FORMAT_WITH_WEEKDAY,
   type PlainDate,
   plainDateAddDays,
   plainDateFromISO,
@@ -238,5 +240,45 @@ describe('calendar availability and digits', () => {
   it('writes day numbers in the locale digits', () => {
     expect(formatDayNumber(8, 'fa-IR')).toBe('۸');
     expect(formatDayNumber(28, 'en')).toBe('28');
+  });
+});
+
+describe('calendar labels', () => {
+  const day = iso('2027-02-06');
+  const label = (calendar: CalendarSystem) =>
+    formatCalendarDate(calendar, day, DATE_FORMAT_WITH_WEEKDAY, 'en');
+  const heading = (calendar: CalendarSystem) =>
+    formatCalendarMonthLabel(calendar, calendarMonthOf(calendar, day), 'en');
+
+  it.each([
+    ['gregory', '2027'],
+    ['iso8601', '2027'],
+    ['buddhist', '2570'],
+    ['roc', '116'],
+    ['japanese', 'Reiwa'],
+  ] as const)(
+    '%s names the Gregorian month, the day, and its own year',
+    (calendar, year) => {
+      expect(label(calendar)).toMatch(/^Saturday, February 6, /);
+      expect(label(calendar)).toContain(year);
+      expect(heading(calendar)).toMatch(/^February /);
+      expect(heading(calendar)).toContain(year);
+    },
+  );
+
+  it('labels iso8601 exactly as gregory', () => {
+    expect(label('iso8601')).toBe(label('gregory'));
+    expect(heading('iso8601')).toBe(heading('gregory'));
+  });
+
+  it('keeps the Intl label where Intl and Temporal agree', () => {
+    expect(
+      formatCalendarDate(
+        'persian',
+        iso('2026-10-30'),
+        DATE_FORMAT_WITH_WEEKDAY,
+        'en',
+      ),
+    ).toBe('Friday, Aban 8, 1405 AP');
   });
 });

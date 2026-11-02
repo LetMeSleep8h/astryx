@@ -51,7 +51,6 @@ import {
   plainDateIsBefore,
   plainDateIsEqual,
   plainDateGetWeekNumber,
-  plainDateFormat,
   plainDateWeekFieldName,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils/plainDate';
@@ -62,6 +61,7 @@ import {
   calendarMonthOf,
   calendarShiftMonths,
   calendarShiftYears,
+  formatCalendarDate,
   formatCalendarMonthLabel,
   formatDayNumber,
   isInCalendarMonth,
@@ -265,7 +265,7 @@ function formatDateLabel(
   calendar: CalendarSystem,
   locale: string,
 ): string {
-  return plainDateFormat(date, {...DATE_FORMAT_WITH_WEEKDAY, calendar}, locale);
+  return formatCalendarDate(calendar, date, DATE_FORMAT_WITH_WEEKDAY, locale);
 }
 
 // =============================================================================
