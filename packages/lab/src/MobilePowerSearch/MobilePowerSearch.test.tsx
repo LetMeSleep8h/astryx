@@ -2129,6 +2129,56 @@ describe('MobilePowerSearch value types', () => {
     expect(within(sheet()).queryByRole('grid')).toBeNull();
   });
 
+  it('date_absolute with isDateOnly: false shows the token and row with the time the editor opens on', () => {
+    // 2024-03-10T03:00:00Z, read in the viewer's zone with no timezoneID: the
+    // token, the row and the date-and-time editor agree on the wall-clock
+    // time, whatever day that falls on.
+    const unixSeconds = 1710039600;
+    setupValues({
+      filters: [
+        {
+          field: 'updated',
+          operator: 'after',
+          value: {type: 'date_absolute', unixSeconds},
+        },
+      ],
+    });
+    const expected = new Intl.DateTimeFormat('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(unixSeconds * 1000);
+    expect(within(field()).getByText(new RegExp(expected))).toBeTruthy();
+    openSheet();
+    expect(
+      within(sheet()).getByRole('button', {name: new RegExp(expected)}),
+    ).toBeTruthy();
+    tapRow(/Updated is after/);
+    const [day, time] = expected
+      .split(', ')
+      .reduce<[string, string]>(
+        ([d, t], part, index, parts) =>
+          index === parts.length - 1
+            ? [d, part]
+            : [d ? `${d}, ${part}` : part, t],
+        ['', ''],
+      );
+    expect(
+      within(sheet()).getByLabelText<HTMLInputElement>('Date and time').value,
+    ).toBe(
+      new Intl.DateTimeFormat('en-US', {dateStyle: 'long'}).format(
+        unixSeconds * 1000,
+      ),
+    );
+    expect(
+      within(sheet()).getByLabelText<HTMLInputElement>('Date and time time')
+        .value,
+    ).toBe(time);
+    expect(day.length).toBeGreaterThan(0);
+  });
+
   it('date_relative: rows stage a single relative value', () => {
     const {onChange} = setupValues();
     openAddFlow();

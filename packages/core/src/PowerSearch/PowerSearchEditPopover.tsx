@@ -117,6 +117,7 @@ export interface PowerSearchEditPopoverProps {
   saveButtonLabel?: string;
   /** Max suggestions in string and entity value typeaheads. */
   maxMenuItems?: number;
+  timezoneID?: string;
   /** Whether the filter is read-only. */
   isReadOnly?: boolean;
 }
@@ -260,6 +261,7 @@ interface NestedSubFilterRowProps {
   subFilter: EditablePartialFilter;
   onChange: (subFilter: EditablePartialFilter) => void;
   maxMenuItems?: number;
+  timezoneID?: string;
   isReadOnly: boolean;
 }
 
@@ -268,6 +270,7 @@ function NestedSubFilterRow({
   subFilter,
   onChange,
   maxMenuItems,
+  timezoneID,
   isReadOnly,
 }: NestedSubFilterRowProps) {
   const t = useComponentTranslator();
@@ -372,6 +375,7 @@ function NestedSubFilterRow({
             onChange={handleValueChange}
             config={config}
             maxMenuItems={maxMenuItems}
+            timezoneID={timezoneID}
             isDisabled={isReadOnly}
           />
         </div>
@@ -391,6 +395,7 @@ interface NestedEditorProps {
   onOperatorChange: (operatorKey: string) => void;
   onPartialFilterChange: (filter: PartialFilter) => void;
   maxMenuItems?: number;
+  timezoneID?: string;
   isReadOnly: boolean;
 }
 
@@ -401,6 +406,7 @@ function NestedEditor({
   onOperatorChange,
   onPartialFilterChange,
   maxMenuItems,
+  timezoneID,
   isReadOnly,
 }: NestedEditorProps) {
   const t = useComponentTranslator();
@@ -523,6 +529,7 @@ function NestedEditor({
               subFilter={sf}
               onChange={updated => handleUpdate(itemPath, updated)}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isReadOnly={isReadOnly}
             />
           ),
@@ -550,6 +557,7 @@ function NestedEditor({
             subFilter={sf}
             onChange={updated => handleUpdate(itemPath, updated)}
             maxMenuItems={maxMenuItems}
+            timezoneID={timezoneID}
             isReadOnly={isReadOnly}
           />
         ),
@@ -665,6 +673,7 @@ export function PowerSearchEditPopover({
   onCancel,
   saveButtonLabel: saveButtonLabelFromProps,
   maxMenuItems,
+  timezoneID,
   isReadOnly = false,
 }: PowerSearchEditPopoverProps) {
   const t = useComponentTranslator();
@@ -848,6 +857,7 @@ export function PowerSearchEditPopover({
               onOperatorChange={handleOperatorChange}
               onPartialFilterChange={setPartialFilter}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isReadOnly={isReadOnly}
             />
           </VStack>
@@ -922,6 +932,7 @@ export function PowerSearchEditPopover({
               onEnter={handleSave}
               config={config}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isDisabled={isReadOnly}
             />
           )}

@@ -23,20 +23,19 @@ import type {
   PowerSearchOperator,
 } from '@astryxdesign/core/PowerSearch';
 import {resolveOperatorLabel} from '@astryxdesign/core/PowerSearch';
+import {
+  isoDateTimeToUnixSeconds as coreIsoDateTimeToUnixSeconds,
+  isoDateToUnixSeconds as coreIsoDateToUnixSeconds,
+  resolveDateZone,
+  unixSecondsToISODate as coreUnixSecondsToISODate,
+  unixSecondsToISODateTime as coreUnixSecondsToISODateTime,
+} from '@astryxdesign/core/internal/powersearch-dates';
 import type {InternalConfig} from '@astryxdesign/core/PowerSearch/utils';
 import type {TranslatorFn} from '@astryxdesign/core/i18n';
 import type {SearchableItem} from '@astryxdesign/core/Typeahead';
 import type {ISODateTimeString} from '@astryxdesign/core/DateTimeInput';
 import type {ISODateString} from '@astryxdesign/core/utils';
-import {
-  groupItems,
-  plainDateFromDate,
-  plainDateFromInstant,
-  plainDateFromISO,
-  plainDateToDate,
-  plainDateToInstant,
-  plainDateToISO,
-} from '@astryxdesign/core/utils';
+import {groupItems} from '@astryxdesign/core/utils';
 
 // =============================================================================
 // Config adapter
@@ -517,75 +516,47 @@ export function createContentSearchSource(
 // Dates
 // =============================================================================
 
-/**
- * The calendar date an instant falls on in `timezoneID`, or in the viewer's
- * zone when none is configured. The same zone drives `formatFilterValue`, so
- * the editor and the token agree on a boundary date.
- */
+// Core owns the zone rule: a calendar day reads in `timezoneID`, else the UTC
+// day; an instant reads in `timezoneID`, else the viewer's zone. Lab calls the
+// same conversions, so the token, the rows and the editors cannot drift.
+
+/** The calendar day an instant falls on, as the token and rows show it. */
 export function unixSecondsToISODate(
   unixSeconds: number,
   timezoneID: string | undefined,
 ): ISODateString {
-  const instant = unixSeconds * 1000;
-  const plain =
-    timezoneID != null
-      ? plainDateFromInstant(instant, timezoneID)
-      : plainDateFromDate(new Date(instant));
-  return plainDateToISO(plain);
+  return coreUnixSecondsToISODate(
+    unixSeconds,
+    resolveDateZone(timezoneID, true),
+  );
 }
 
-/** Wall-clock `YYYY-MM-DDTHH:mm` of an instant in `timezoneID` or the viewer's zone. */
+/** Wall-clock `YYYY-MM-DDTHH:mm` of an instant, as the time editor shows it. */
 export function unixSecondsToISODateTime(
   unixSeconds: number,
   timezoneID: string | undefined,
 ): ISODateTimeString {
-  const date = new Date(unixSeconds * 1000);
-  const parts = new Intl.DateTimeFormat('en-US', {
-    ...(timezoneID != null ? {timeZone: timezoneID} : {}),
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-    calendar: 'gregory',
-  }).formatToParts(date);
-  const lookup = Object.fromEntries(
-    parts.filter(part => part.type !== 'literal').map(p => [p.type, p.value]),
+  return coreUnixSecondsToISODateTime(
+    unixSeconds,
+    resolveDateZone(timezoneID, false),
   );
-  return `${lookup.year}-${lookup.month}-${lookup.day}T${lookup.hour}:${lookup.minute}` as ISODateTimeString;
 }
 
-/** The instant a wall-clock `YYYY-MM-DDTHH:mm` names in `timezoneID` or the viewer's zone. */
+/** The instant a wall-clock time names in the zone the time editor shows. */
 export function isoDateTimeToUnixSeconds(
   value: ISODateTimeString,
   timezoneID: string | undefined,
 ): number {
-  const [datePart, timePart = '00:00'] = value.split('T');
-  const [hour, minute] = timePart.split(':').map(Number);
-  const plain = plainDateFromISO(datePart as ISODateString);
-  const instant =
-    timezoneID != null
-      ? plainDateToInstant(plain, timezoneID, hour, minute)
-      : new Date(
-          plain.year,
-          plain.month - 1,
-          plain.day,
-          hour,
-          minute,
-        ).getTime();
-  return Math.floor(instant / 1000);
+  return coreIsoDateTimeToUnixSeconds(
+    value,
+    resolveDateZone(timezoneID, false),
+  );
 }
 
-/** Midnight at the start of `date` in `timezoneID` (or the viewer's zone). */
+/** Midnight of a picked day in the zone the day editor shows. */
 export function isoDateToUnixSeconds(
   date: ISODateString,
   timezoneID: string | undefined,
 ): number {
-  const plain = plainDateFromISO(date);
-  const instant =
-    timezoneID != null
-      ? plainDateToInstant(plain, timezoneID)
-      : plainDateToDate(plain).getTime();
-  return Math.floor(instant / 1000);
+  return coreIsoDateToUnixSeconds(date, resolveDateZone(timezoneID, true));
 }

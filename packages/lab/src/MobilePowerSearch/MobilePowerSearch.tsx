@@ -213,10 +213,11 @@ export interface MobilePowerSearchProps extends Omit<
   /** Label for the edit sheet's save action. @default 'Apply' when editing, 'Add filter' when creating */
   popoverSaveButtonLabel?: string;
   /**
-   * Accepted for API parity with Core PowerSearch. Dates follow Core's
-   * semantics: tokens and rows show a `date_absolute` as the Core token does
-   * (its day in the browser's zone) and the date editors read and write the
-   * UTC day, so this prop does not change a date value today.
+   * The zone date values are read and written in, as Core PowerSearch reads
+   * them: a date-only `date_absolute` and each range part is a calendar day
+   * in `timezoneID`, else the UTC day, on the token, the rows and the date
+   * editors, and a picked day stores as that zone's midnight; a date-and-time
+   * value is an instant shown in `timezoneID`, else the viewer's zone.
    */
   timezoneID?: string;
   /** Content at the end of the field row. */

@@ -140,7 +140,8 @@ export const docs = {
     {
       name: 'timezoneID',
       type: 'string',
-      description: 'Timezone ID for date formatting (e.g. "America/New_York").',
+      description:
+        'IANA zone the date values are read and written in: a calendar day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. E.g. "America/New_York".',
     },
     {
       name: 'handleRef',
@@ -173,17 +174,20 @@ export const docs = {
     {
       name: 'menuWidth',
       type: 'number',
-      description: 'Maximum width for the operator/value dropdown menu in pixels.',
+      description:
+        'Maximum width for the operator/value dropdown menu in pixels.',
     },
     {
       name: 'maxOperatorMenuItems',
       type: 'number',
-      description: 'Maximum number of items displayed in the operator dropdown.',
+      description:
+        'Maximum number of items displayed in the operator dropdown.',
     },
     {
       name: 'tokenOverflowBehavior',
       type: "'none' | 'unfocusedInline' | 'unfocusedLayer'",
-      description: 'Controls how tokens overflow when the container is too narrow. Forwarded to Tokenizer.',
+      description:
+        'Controls how tokens overflow when the container is too narrow. Forwarded to Tokenizer.',
       default: "'none'",
     },
     {
@@ -409,7 +413,8 @@ export const docsZh = {
     {
       name: 'timezoneID',
       type: 'string',
-      description: '用于日期格式化的时区 ID（例如 "America/New_York"）。',
+      description:
+        '日期值读写所用的 IANA 时区：日历日在该时区显示、编辑并以其午夜存储；未设置时，日期为 UTC 日。例如 "America/New_York"。',
     },
     {
       name: 'handleRef',
@@ -522,7 +527,8 @@ export const docsDense = {
       'Max ranked results for a non-empty query; excludes value editors.',
     menuWidth: 'Main field/search menu width in pixels.',
     popoverSaveButtonLabel: 'Label for save button in edit popover.',
-    timezoneID: 'Timezone ID for date formatting (e.g. "America/New_York").',
+    timezoneID:
+      'IANA zone date values read and write in; unset, a day is its UTC day.',
     handleRef:
       'Imperative handle w/ focusTypeahead() + blurTypeahead() methods.',
     endContent:

@@ -833,6 +833,11 @@
       "source": "./src/internal/tokenizer-presentation.ts",
       "types": "./dist/internal/tokenizer-presentation.d.ts",
       "default": "./dist/internal/tokenizer-presentation.js"
+    },
+    "./internal/powersearch-dates": {
+      "source": "./src/internal/powersearch-dates.ts",
+      "types": "./dist/internal/powersearch-dates.d.ts",
+      "default": "./dist/internal/powersearch-dates.js"
     }
   },
   "files": [
