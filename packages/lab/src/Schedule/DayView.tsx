@@ -16,7 +16,7 @@ import {
 } from '@astryxdesign/core/utils';
 import {enumerateDates, getScheduleRangeFromDates} from './dateMath';
 import {useScheduleContext} from './context';
-import {ScheduleMonthTitle, ScheduleFrame} from './shared';
+import {ScheduleMonthTitle, ScheduleFrame, useScheduleCalendar} from './shared';
 import {TimeGridView} from './TimeGridView';
 import {scheduleRangeToZonedDateTimeRange} from './zonedDateTime';
 import type {
@@ -36,9 +36,10 @@ function ScheduleDayView({
   const {minHour = 0, maxHour = 24, hourHeight = 100, renderPopover} = options;
   const rangeDate = date.toPlainDate();
   const days = enumerateDates(range.startDate, range.endDate);
+  const calendar = useScheduleCalendar();
   const titleLabel = plainDateFormat(
     rangeDate,
-    DATE_FORMAT_WITH_WEEKDAY,
+    {...DATE_FORMAT_WITH_WEEKDAY, calendar},
     locale,
   );
 

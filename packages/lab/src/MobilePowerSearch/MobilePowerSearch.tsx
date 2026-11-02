@@ -133,6 +133,10 @@ import {
 } from '@astryxdesign/core/hooks';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import {
+  useCalendarSystem,
+  type CalendarSystem,
+} from '@astryxdesign/core/internal/calendar-system';
+import {
   colorVars,
   fontWeightVars,
   radiusVars,
@@ -613,6 +617,7 @@ function formatValueText(
   t: ReturnType<typeof useTranslator>,
   locale: string,
   timezoneID: string | undefined,
+  calendar: CalendarSystem,
 ): string {
   return formatFilterValue(
     config,
@@ -622,6 +627,7 @@ function formatValueText(
     t,
     locale,
     timezoneID,
+    calendar,
   );
 }
 
@@ -652,6 +658,7 @@ function MobilePowerSearchToken({
 }) {
   const t = useTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'MobilePowerSearch');
   const fieldLabel = field?.label ?? filter.field;
   const operatorLabel =
     operator == null ? filter.operator : resolveOperatorLabel(operator, t);
@@ -673,6 +680,7 @@ function MobilePowerSearchToken({
           t,
           locale,
           timezoneID,
+          calendar,
         );
   return (
     <Token
@@ -738,6 +746,7 @@ export function MobilePowerSearch({
   const config = useMobilePowerSearchConfig(configProp);
   const t = useTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'MobilePowerSearch');
   const announceOnPage = useAnnounce();
   // `useAnnounce` delivers inside the open Astryx modal that encloses its
   // caller (spec AST-086 FR14), and this component renders above the sheets,
@@ -1337,10 +1346,11 @@ export function MobilePowerSearch({
         t,
         locale,
         timezoneID,
+        calendar,
       );
       return {label, value: value || null};
     },
-    [config, locale, t, timezoneID],
+    [calendar, config, locale, t, timezoneID],
   );
   const describeFilter = useCallback(
     (filter: PowerSearchFilter): string => {

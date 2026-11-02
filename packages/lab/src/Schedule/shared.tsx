@@ -4,7 +4,8 @@
 
 /**
  * @file shared.tsx
- * @input Schedule events, dates, timezone IDs, provider locale, and display metadata
+ * @input Schedule events, dates, timezone IDs, provider locale and calendar,
+ *   and display metadata
  * @output Shared rendering primitives, formatters, and styles for schedule views
  * @position Internal view utility module; consumed by Monthly, Weekly, Day, and List views
  */
@@ -13,6 +14,10 @@ import {type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useScrollableArea} from '@astryxdesign/core/hooks';
 import {getLocaleDirection, type Locale} from '@astryxdesign/core/i18n';
+import {
+  useCalendarSystem,
+  type CalendarSystem,
+} from '@astryxdesign/core/internal/calendar-system';
 import {
   borderVars,
   colorVars,
@@ -115,6 +120,15 @@ export function ScheduleFrame({
   );
 }
 
+/**
+ * The calendar that Schedule writes its date labels in: the provider's
+ * resolved calendar, as Core's date components resolve it. The views still lay
+ * out and step Gregorian days, weeks, and months.
+ */
+export function useScheduleCalendar(): CalendarSystem {
+  return useCalendarSystem(undefined, 'Schedule');
+}
+
 export function ScheduleMonthTitle({
   date,
   timezoneID,
@@ -123,8 +137,14 @@ export function ScheduleMonthTitle({
   timezoneID: string;
 }) {
   const {locale} = useScheduleContext();
+  const calendar = useScheduleCalendar();
   return (
-    <LocalizedMonthTitle date={date} timezoneID={timezoneID} locale={locale} />
+    <LocalizedMonthTitle
+      date={date}
+      timezoneID={timezoneID}
+      locale={locale}
+      calendar={calendar}
+    />
   );
 }
 
@@ -132,16 +152,18 @@ function LocalizedMonthTitle({
   date,
   timezoneID,
   locale,
+  calendar,
 }: {
   date: PlainDate;
   timezoneID: string;
   locale: Locale;
+  calendar: CalendarSystem;
 }) {
   const parts = new Intl.DateTimeFormat(locale, {
     month: 'long',
     year: 'numeric',
     timeZone: timezoneID,
-    calendar: 'gregory',
+    calendar,
   }).formatToParts(new Date(plainDateToInstant(date, timezoneID, 12)));
 
   return parts.map((part, index) =>
@@ -165,7 +187,8 @@ export function ScheduleRangeMonthTitle({
   timezoneID: string;
 }) {
   const {locale} = useScheduleContext();
-  if (start.year === end.year && start.month === end.month) {
+  const calendar = useScheduleCalendar();
+  if (isSameCalendarMonth(start, end, timezoneID, locale, calendar)) {
     return <ScheduleMonthTitle date={start} timezoneID={timezoneID} />;
   }
 
@@ -174,11 +197,17 @@ export function ScheduleRangeMonthTitle({
     timezoneID,
     {month: 'long'},
     locale,
+    calendar,
   );
   const endMonthTitle = (
-    <LocalizedMonthTitle date={end} timezoneID={timezoneID} locale={locale} />
+    <LocalizedMonthTitle
+      date={end}
+      timezoneID={timezoneID}
+      locale={locale}
+      calendar={calendar}
+    />
   );
-  return start.year === end.year ? (
+  return isSameCalendarYear(start, end, timezoneID, locale, calendar) ? (
     <>
       <span {...stylex.props(styles.titleEmphasis)}>{startMonth}</span> -{' '}
       {endMonthTitle}
@@ -189,6 +218,7 @@ export function ScheduleRangeMonthTitle({
         date={start}
         timezoneID={timezoneID}
         locale={locale}
+        calendar={calendar}
       />{' '}
       - {endMonthTitle}
     </>
@@ -480,18 +510,50 @@ export function formatWithPlainDate(
   timezoneID: string,
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
   return new Intl.DateTimeFormat(locale, {
     ...options,
     timeZone: timezoneID,
-    calendar: 'gregory',
+    calendar,
   }).format(new Date(plainDateToInstant(date, timezoneID, 12)));
+}
+
+// A Gregorian month or year can span two months or years of another calendar,
+// so ranges compare the calendar's own fields.
+function isSameCalendarMonth(
+  a: PlainDate,
+  b: PlainDate,
+  timezoneID: string,
+  locale: Locale,
+  calendar: CalendarSystem,
+): boolean {
+  const options = {month: 'numeric', year: 'numeric'} as const;
+  return (
+    formatWithPlainDate(a, timezoneID, options, locale, calendar) ===
+    formatWithPlainDate(b, timezoneID, options, locale, calendar)
+  );
+}
+
+function isSameCalendarYear(
+  a: PlainDate,
+  b: PlainDate,
+  timezoneID: string,
+  locale: Locale,
+  calendar: CalendarSystem,
+): boolean {
+  const options = {year: 'numeric'} as const;
+  return (
+    formatWithPlainDate(a, timezoneID, options, locale, calendar) ===
+    formatWithPlainDate(b, timezoneID, options, locale, calendar)
+  );
 }
 
 export function formatMonthTitle(
   date: PlainDate,
   timezoneID: string,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
   return formatWithPlainDate(
     date,
@@ -501,6 +563,7 @@ export function formatMonthTitle(
       year: 'numeric',
     },
     locale,
+    calendar,
   );
 }
 
@@ -509,26 +572,29 @@ export function formatWeekTitle(
   end: PlainDate,
   timezoneID: string,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
-  if (start.year === end.year && start.month === end.month) {
-    return formatMonthTitle(start, timezoneID, locale);
+  if (isSameCalendarMonth(start, end, timezoneID, locale, calendar)) {
+    return formatMonthTitle(start, timezoneID, locale, calendar);
   }
   const startMonth = formatWithPlainDate(
     start,
     timezoneID,
     {month: 'long'},
     locale,
+    calendar,
   );
-  const endMonthTitle = formatMonthTitle(end, timezoneID, locale);
-  return start.year === end.year
+  const endMonthTitle = formatMonthTitle(end, timezoneID, locale, calendar);
+  return isSameCalendarYear(start, end, timezoneID, locale, calendar)
     ? `${startMonth} - ${endMonthTitle}`
-    : `${formatMonthTitle(start, timezoneID, locale)} - ${endMonthTitle}`;
+    : `${formatMonthTitle(start, timezoneID, locale, calendar)} - ${endMonthTitle}`;
 }
 
 export function formatFullDate(
   date: PlainDate,
   timezoneID: string,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
   return formatWithPlainDate(
     date,
@@ -540,6 +606,7 @@ export function formatFullDate(
       year: 'numeric',
     },
     locale,
+    calendar,
   );
 }
 
@@ -549,13 +616,14 @@ export function formatWeekRange(
   end: PlainDate,
   timezoneID: string,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
     timeZone: timezoneID,
-    calendar: 'gregory',
+    calendar,
   }).formatRange(
     new Date(plainDateToInstant(start, timezoneID, 12)),
     new Date(plainDateToInstant(end, timezoneID, 12)),
@@ -567,16 +635,24 @@ export function formatWeekday(
   timezoneID: string,
   weekday: 'short' | 'long',
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
-  return formatWithPlainDate(date, timezoneID, {weekday}, locale);
+  return formatWithPlainDate(date, timezoneID, {weekday}, locale, calendar);
 }
 
 export function formatDayNumber(
   date: PlainDate,
   timezoneID: string,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
-  return formatWithPlainDate(date, timezoneID, {day: 'numeric'}, locale);
+  return formatWithPlainDate(
+    date,
+    timezoneID,
+    {day: 'numeric'},
+    locale,
+    calendar,
+  );
 }
 
 export function formatHour(hour: number, locale: Locale): string {
@@ -640,6 +716,7 @@ export function formatEventDateTimeRange(
   event: CalendarInstantEvent,
   timezoneID: string,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'long',
@@ -647,6 +724,7 @@ export function formatEventDateTimeRange(
     hour: 'numeric',
     minute: '2-digit',
     timeZone: timezoneID,
+    calendar,
   }).formatRange(new Date(event.start), new Date(event.end));
 }
 

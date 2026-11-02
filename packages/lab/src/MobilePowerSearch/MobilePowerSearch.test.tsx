@@ -32,6 +32,7 @@ import type {
   PowerSearchTokenProps,
 } from '@astryxdesign/core/PowerSearch';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {MobilePowerSearch} from './MobilePowerSearch';
 import {
   createContentSearchSource,
@@ -2313,6 +2314,44 @@ describe('MobilePowerSearch timezone', () => {
         'Pacific/Honolulu',
       ),
     ).toBe(BOUNDARY_SECONDS);
+  });
+});
+
+// =============================================================================
+// Calendar
+// =============================================================================
+
+describe('MobilePowerSearch calendar', () => {
+  // 2026-10-30T12:00:00Z; the buddhist calendar needs no Temporal.
+  const dateFilter: PowerSearchFilter = {
+    field: 'created',
+    operator: 'after',
+    value: {type: 'date_absolute', unixSeconds: 1793361600},
+  };
+
+  it('writes the token and the row in the provider calendar', () => {
+    render(
+      <InternationalizationProvider locale="en" calendar="buddhist">
+        <MobilePowerSearch
+          config={valueTypesConfig}
+          filters={[dateFilter]}
+          onChange={() => {}}
+          timezoneID="UTC"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(within(field()).getByText(/Oct 30, 2569 BE/)).toBeInTheDocument();
+    openSheet();
+    expect(
+      within(sheet()).getByRole('button', {
+        name: /^Created is after Oct 30, 2569 BE/,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps Gregorian dates without a provider calendar', () => {
+    setup({config: valueTypesConfig, filters: [dateFilter], timezoneID: 'UTC'});
+    expect(within(field()).getByText(/Oct 30, 2026/)).toBeInTheDocument();
   });
 });
 
