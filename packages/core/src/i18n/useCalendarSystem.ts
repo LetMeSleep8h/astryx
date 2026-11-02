@@ -68,8 +68,8 @@ export function getExplicitLocaleCalendar(
 
 /**
  * A calendar this runtime can show, else `gregory`. Calendars outside the
- * Gregorian-aligned set need `Temporal`. The fallback warns once for each
- * calendar, on the server and in the browser.
+ * Gregorian-aligned set need a `Temporal` that supports them. The fallback
+ * warns once for each calendar, on the server and in the browser.
  */
 function availableCalendarOrGregorian(
   calendar: CalendarSystem,
@@ -81,9 +81,10 @@ function availableCalendarOrGregorian(
   warnOnce(
     `calendar-unavailable:${calendar}`,
     source,
-    `The "${calendar}" calendar needs Temporal, which this runtime does not ` +
-      'have; showing Gregorian dates. Load a Temporal polyfill, such as ' +
-      "'temporal-polyfill/full/global', on the server and in the browser.",
+    `The "${calendar}" calendar needs a Temporal that supports it, and this ` +
+      'runtime has none; showing Gregorian dates. Load a Temporal polyfill ' +
+      "with every calendar, such as 'temporal-polyfill/full/global', on the " +
+      'server and in the browser.',
   );
   return 'gregory';
 }

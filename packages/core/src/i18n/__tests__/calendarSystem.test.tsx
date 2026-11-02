@@ -153,6 +153,28 @@ describe('without Temporal', () => {
     expect(messages[0]).toContain('temporal-polyfill/full/global');
   });
 
+  it('treats a Temporal without the calendar as missing', () => {
+    const warn = silenceWarnings();
+    // The default temporal-polyfill build knows only the ISO calendar.
+    globals.Temporal = {
+      PlainDate: class {
+        constructor(_y: number, _m: number, _d: number, calendar: string) {
+          if (calendar !== 'iso8601') {
+            throw new RangeError(`Unknown calendar ${calendar}`);
+          }
+        }
+      },
+    };
+    try {
+      expect(renderProbe(null, 'persian').shown).toBe('gregory');
+    } finally {
+      delete globals.Temporal;
+    }
+    expect(String(warn.mock.calls[0]?.[0])).toContain(
+      'needs a Temporal that supports it',
+    );
+  });
+
   it.each(['gregory', 'iso8601', 'buddhist', 'roc', 'japanese'] as const)(
     'shows %s with no warning',
     calendar => {
