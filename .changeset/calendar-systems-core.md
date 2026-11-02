@@ -1,0 +1,7 @@
+---
+'@astryxdesign/core': patch
+---
+
+[feat] Calendar shows dates in other calendar systems. `InternationalizationProvider` and `Calendar` take a `calendar` prop (`CalendarSystem`, exported from `@astryxdesign/core/i18n`), such as `'persian'`, `'hebrew'`, `'islamic-umalqura'`, or `'buddhist'`; a `-u-ca-` keyword in the provider locale, such as `th-TH-u-ca-buddhist`, selects one too. A locale alone never changes the calendar, so `fa-IR` keeps Gregorian dates until you set `calendar="persian"`. Values do not change: `value`, `min`, `max`, `focusDate`, and every callback stay Gregorian ISO dates. In the selected calendar, the grid shows that calendar's months, including leap months such as Adar I and Adar II and the five- or six-day thirteenth month of the Ethiopic and Coptic calendars. Its heading, day names, and announcements use the calendar; Previous, Next, PageUp, and PageDown move one calendar month; and Shift+PageUp and Shift+PageDown move one calendar year to the same month. Day numbers use the locale's digits, and week numbers stay ISO 8601. The Gregorian-aligned calendars (`gregory`, `iso8601`, `buddhist`, `roc`, `japanese`) work everywhere. The others need `Temporal`; where the runtime lacks it, such as Safari or Node.js 24, load a polyfill like `temporal-polyfill/full/global` on the server and in the browser, or those calendars show Gregorian dates and warn once in development.
+
+@nynexman4464
