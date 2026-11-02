@@ -85,6 +85,9 @@ adaptive-native`; only `TimeInput` accepts all six.
   always show the native surface, with no eligibility fallbacks — a state the
   native control cannot express (seconds, non-default step/increment, preset
   time options, no usable native control) is the caller's explicit choice.
+  The one exception is the calendar: with a calendar other than `gregory` or
+  `iso8601`, explicit `native` uses the Astryx surface and warns in development
+  (`spec:AST-111` FR15).
   `presentation="adaptive-native"` — including the default and
   `nativePicker="touch"` — MUST keep the released fallbacks: in those same
   states it falls back to the component's Astryx surface (per-segment for
@@ -142,12 +145,12 @@ adaptive-native`; only `TimeInput` accepts all six.
 
 ## Verification
 
-| Contract | Verification                               | Representative states                                                                                                                 | Mutation or failure expectation                                                       |
-| -------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| FR1      | Unit tests per input + real-browser check  | Per-component values × fine/coarse, incl. forced + `TimeInput` sheet; `text-input` type-rejected outside `TimeInput`                  | Wrong/substituted surface fails                                                       |
-| FR2      | Unit tests, native requested               | Seconds, step≠default, presets, no usable native: explicit `native` stays native; `adaptive-native` and deprecated `always` fall back | Any fallback under explicit `native`, or none under `adaptive-native`/`always`, fails |
-| FR3–FR4  | Unit tests: default, deprecated, dual-prop | Omitted; `touch`/`always`/`never` per component; both props, any order                                                                | Mapping drift (incl. `TimeInput:never→sheet`) or `nativePicker` winning fails         |
-| FR5      | Doc/type consistency tests                 | All 3 components, en + zh                                                                                                             | Documented-but-untyped value/default fails                                            |
+| Contract | Verification                               | Representative states                                                                                                                 | Mutation or failure expectation                                                                   |
+| -------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| FR1      | Unit tests per input + real-browser check  | Per-component values × fine/coarse, incl. forced + `TimeInput` sheet; `text-input` type-rejected outside `TimeInput`                  | Wrong/substituted surface fails                                                                   |
+| FR2      | Unit tests, native requested               | Seconds, step≠default, presets, no usable native: explicit `native` stays native; `adaptive-native` and deprecated `always` fall back | Any eligibility fallback under explicit `native`, or none under `adaptive-native`/`always`, fails |
+| FR3–FR4  | Unit tests: default, deprecated, dual-prop | Omitted; `touch`/`always`/`never` per component; both props, any order                                                                | Mapping drift (incl. `TimeInput:never→sheet`) or `nativePicker` winning fails                     |
+| FR5      | Doc/type consistency tests                 | All 3 components, en + zh                                                                                                             | Documented-but-untyped value/default fails                                                        |
 
 ## Decision log
 
