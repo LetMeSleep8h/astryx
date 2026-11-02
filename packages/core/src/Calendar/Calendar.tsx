@@ -978,20 +978,27 @@ function MonthGrid({
     [getFocusedDate, onNavigateNext],
   );
 
-  // Handle PageUp/PageDown
-  const handlePageUp = useCallback(() => {
-    const focusedDate = getFocusedDate();
-    if (focusedDate) {
-      onNavigatePrevious?.(focusedDate, 1, 'months');
-    }
-  }, [getFocusedDate, onNavigatePrevious]);
+  // PageUp/PageDown move by a month, and with Shift by a year (APG date
+  // picker dialog).
+  const handlePageUp = useCallback(
+    (e: React.KeyboardEvent) => {
+      const focusedDate = getFocusedDate();
+      if (focusedDate) {
+        onNavigatePrevious?.(focusedDate, 1, e.shiftKey ? 'years' : 'months');
+      }
+    },
+    [getFocusedDate, onNavigatePrevious],
+  );
 
-  const handlePageDown = useCallback(() => {
-    const focusedDate = getFocusedDate();
-    if (focusedDate) {
-      onNavigateNext?.(focusedDate, 1, 'months');
-    }
-  }, [getFocusedDate, onNavigateNext]);
+  const handlePageDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const focusedDate = getFocusedDate();
+      if (focusedDate) {
+        onNavigateNext?.(focusedDate, 1, e.shiftKey ? 'years' : 'months');
+      }
+    },
+    [getFocusedDate, onNavigateNext],
+  );
 
   // Grid focus navigation.
   //
@@ -1025,30 +1032,6 @@ function MonthGrid({
     onPageUp: handlePageUp,
     onPageDown: handlePageDown,
   });
-
-  // Shift+PageUp and Shift+PageDown move the focused day by a calendar year,
-  // as the APG date picker defines. The grid focus hook reads no modifier on
-  // a page key, so the year keys are handled before it.
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!e.shiftKey || (e.key !== 'PageUp' && e.key !== 'PageDown')) {
-        handleGridKeyDown(e);
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-      const focusedDate = getFocusedDate();
-      if (focusedDate == null) {
-        return;
-      }
-      if (e.key === 'PageUp') {
-        onNavigatePrevious?.(focusedDate, 1, 'years');
-      } else {
-        onNavigateNext?.(focusedDate, 1, 'years');
-      }
-    },
-    [getFocusedDate, handleGridKeyDown, onNavigateNext, onNavigatePrevious],
-  );
 
   // Handle pending focus after month navigation. Every mounted month grid
   // sees the same pending date; only the grid showing that date's month acts,
@@ -1149,7 +1132,7 @@ function MonthGrid({
         // APG grid pattern: a range selection holds multiple selected cells,
         // so the grid must advertise multi-selectability.
         aria-multiselectable={mode === 'range' ? true : undefined}
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleGridKeyDown}
         onFocus={handleGridFocus}
         {...stylex.props(
           monthGridStyles.daysGrid,
