@@ -41,6 +41,8 @@ const NUMBER_PARSER_INFRA_FILE =
   'packages/core/src/NumberInput/numberParser.ts';
 const TIME_FORMAT_INFRA_FILE = 'packages/core/src/utils/timeFormat.ts';
 const CALENDAR_SYSTEM_INFRA_FILE = 'packages/core/src/utils/calendarSystem.ts';
+const CALENDAR_DATE_PARSER_INFRA_FILE =
+  'packages/core/src/utils/calendarDateParser.ts';
 const NUMBER_PARSER_TEST_ORACLE_FILE =
   'packages/core/src/NumberInput/numberParser.test.ts';
 const NUMBER_PARSER_DOCBLOCK_ORACLE_FILE =
@@ -152,6 +154,16 @@ tester.run('no-raw-intl-locale', rule, {
     {
       code: `new Intl.NumberFormat(locale, {useGrouping: false}).format(day);`,
       filename: CALENDAR_SYSTEM_INFRA_FILE,
+      code: `new Intl.DateTimeFormat(locale, {calendar, timeZone: 'UTC'}).formatToParts(ms);`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
+    },
+    {
+      code: `new Intl.DisplayNames(locale, {type: 'calendar'}).of(calendar);`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
+    },
+    {
+      code: `text.toLocaleLowerCase(locale);`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
     },
     // -- Named test-oracle files retain meaningful explicit-locale fixtures. --
     {
@@ -299,6 +311,20 @@ tester.run('no-raw-intl-locale', rule, {
       code: `const {NumberFormat} = Intl;`,
       filename: CALENDAR_SYSTEM_INFRA_FILE,
       errors: [rawIntlReference],
+      code: `new Intl.DateTimeFormat(undefined, {calendar: 'persian'});`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
+      errors: [ambientIntlInImplementation],
+    },
+    {
+      code: `text.toLocaleLowerCase();`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
+      errors: [ambientIntlInImplementation],
+    },
+    {
+      // The helper is approved only at its own path.
+      code: `new Intl.DateTimeFormat(locale, {calendar}).formatToParts(ms);`,
+      filename: 'packages/core/src/DateInput/calendarDateParser.ts',
+      errors: [rawIntlLocale],
     },
     {
       code: `new Intl.RelativeTimeFormat();`,
