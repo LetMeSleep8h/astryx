@@ -42,6 +42,34 @@ export const BANNER_ALERT_KNOWN_FAILURES: ReadonlyArray<KnownFailure> = [
   {
     expectation: 'status-message.message.text-exposed',
     binding: 'Banner urgent alert',
+    state: 'banner-warning-alert-open',
+    evidenceLayer: 'accessibility-tree',
+    failureEquals:
+      'the live region contains "Session expires soonCollapseSave your work to keep your changes." at the pre-update boundary, not the complete authored message "Session expires soon Save your work to keep your changes."',
+    standardsReference:
+      'WCAG 2.2 4.1.3 Status Messages (AA); WAI-ARIA 1.2 alert role — the alert region carries the complete authored message, and its implicit aria-atomic=true presents the whole region.',
+    userImpact:
+      'The DOM text of the alert region includes the disclosure toggle\'s closed tooltip ("Collapse") between the title and the open supporting content, and the parts have no separator. What assistive technology presents for this region is AST-009 real-assistive-technology follow-up; this record claims only the observed DOM text.',
+    reason:
+      'The explicit role lands on the whole Banner under component:Banner FR8 and DEC-2. Keeping control text out of the region, moving the role to the message, or separating the title from the content changes Banner behavior and needs an owner decision, so this migration records the existing exposure.',
+  },
+  {
+    expectation: 'status-message.message.text-exposed',
+    binding: 'Banner urgent alert',
+    state: 'banner-warning-alert-always-visible',
+    evidenceLayer: 'accessibility-tree',
+    failureEquals:
+      'the live region contains "Session expires soonSave your work to keep your changes." at the pre-update boundary, not the complete authored message "Session expires soon Save your work to keep your changes."',
+    standardsReference:
+      'WCAG 2.2 4.1.3 Status Messages (AA); WAI-ARIA 1.2 alert role — the alert region carries the complete authored message, and its implicit aria-atomic=true presents the whole region.',
+    userImpact:
+      "The title and the always-visible supporting content are separate block elements inside the region, and the region's DOM text joins them with no separator. No control text is involved; the whole authored message is present. What assistive technology presents for this region is AST-009 real-assistive-technology follow-up; this record claims only the observed DOM text.",
+    reason:
+      "The shared contract compares the region's DOM text with one authored string, so a message split across Banner's title and content elements reads without a separator. Whether the contract should compare per element or Banner should separate the parts is an owner decision, so this migration records the existing exposure.",
+  },
+  {
+    expectation: 'status-message.message.text-exposed',
+    binding: 'Banner urgent alert',
     state: 'banner-error-alert-end-content',
     evidenceLayer: 'accessibility-tree',
     failureEquals:

@@ -25,22 +25,29 @@ export interface BannerAlertBindingDefinition {
   readonly dismissible: boolean;
   /** Label of a caller-supplied `endContent` action. */
   readonly endContentLabel?: string;
-  /** Supporting content behind Banner's default collapsed disclosure. */
-  readonly collapsedContent?: string;
+  /** Caller-authored supporting content, rendered as Banner children. */
+  readonly supportingContent?: string;
+  /**
+   * How Banner shows the supporting content: behind its default closed
+   * disclosure, behind a disclosure that starts open, or always visible.
+   */
+  readonly contentVisibility?: 'collapsed' | 'open' | 'always-visible';
   readonly storyId: string;
 }
 
 /**
- * The message is everything the caller authors as the alert's text: the title
- * and, when present, the description. Controls are not message text.
+ * The message is everything the caller authors as visible alert text: the
+ * title and, when present, the description or visible supporting content.
+ * Controls are not message text. Closed supporting content is not visible, so
+ * it is not message text.
  */
 function alertFacts(
   title: string,
   replacementTitle: string,
-  description?: string,
+  visibleSupportingText?: string,
 ): AlertFacts {
   const message = (value: string) =>
-    description == null ? value : `${value} ${description}`;
+    visibleSupportingText == null ? value : `${value} ${visibleSupportingText}`;
   return {
     kind: 'live-region',
     role: 'alert',
@@ -57,6 +64,8 @@ export type BannerAlertStateId =
   | 'banner-error-alert-mounted'
   | 'banner-warning-alert-dismissible'
   | 'banner-warning-alert-collapsible'
+  | 'banner-warning-alert-open'
+  | 'banner-warning-alert-always-visible'
   | 'banner-error-alert-end-content'
   | 'banner-error-alert-description';
 
@@ -97,8 +106,45 @@ export const BANNER_ALERT_BINDING_STATES: ReadonlyArray<
     title: 'Session expires soon',
     replacementTitle: 'Session has expired',
     dismissible: false,
-    collapsedContent: 'Save your work to keep your changes.',
+    supportingContent: 'Save your work to keep your changes.',
+    contentVisibility: 'collapsed',
     storyId: 'a11y-alert-pattern--banner-warning-alert-collapsible',
+  },
+  {
+    id: 'banner-warning-alert-open',
+    binding: 'Banner urgent alert',
+    summary:
+      'an explicitly urgent warning with open supporting content remains an assertive alert when its title is replaced',
+    facts: alertFacts(
+      'Session expires soon',
+      'Session has expired',
+      'Save your work to keep your changes.',
+    ),
+    status: 'warning',
+    title: 'Session expires soon',
+    replacementTitle: 'Session has expired',
+    dismissible: false,
+    supportingContent: 'Save your work to keep your changes.',
+    contentVisibility: 'open',
+    storyId: 'a11y-alert-pattern--banner-warning-alert-open',
+  },
+  {
+    id: 'banner-warning-alert-always-visible',
+    binding: 'Banner urgent alert',
+    summary:
+      'an explicitly urgent warning with always-visible supporting content remains an assertive alert when its title is replaced',
+    facts: alertFacts(
+      'Session expires soon',
+      'Session has expired',
+      'Save your work to keep your changes.',
+    ),
+    status: 'warning',
+    title: 'Session expires soon',
+    replacementTitle: 'Session has expired',
+    dismissible: false,
+    supportingContent: 'Save your work to keep your changes.',
+    contentVisibility: 'always-visible',
+    storyId: 'a11y-alert-pattern--banner-warning-alert-always-visible',
   },
   {
     id: 'banner-error-alert-end-content',

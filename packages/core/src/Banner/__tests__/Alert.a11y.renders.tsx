@@ -5,12 +5,12 @@
 /**
  * @file Alert.a11y.renders.tsx
  * @input Uses Banner's public status, role, title, description, dismissibility,
- *   endContent, and children surfaces
+ *   endContent, collapsible, and children surfaces
  * @output One public-interface rendering for every Banner alert binding state
  * @position Shared jsdom and checked-in Storybook fixture layer
  */
 
-import {useState, type ReactElement} from 'react';
+import {useState, type ComponentProps, type ReactElement} from 'react';
 import {Banner} from '../Banner';
 import {Button} from '../../Button';
 import type {
@@ -20,6 +20,20 @@ import type {
 import {BANNER_ALERT_BINDING_STATES} from './Alert.a11y.states';
 
 const transitionTestId = (name: string) => `alert-transition-${name}`;
+
+function collapsibleFor(
+  state: BannerAlertBindingState,
+): ComponentProps<typeof Banner>['collapsible'] {
+  switch (state.contentVisibility) {
+    case 'open':
+      return {defaultIsOpen: true};
+    case 'always-visible':
+      return false;
+    case 'collapsed':
+    case undefined:
+      return undefined;
+  }
+}
 
 function BannerAlertHarness({state}: {state: BannerAlertBindingState}) {
   if (state.facts.kind !== 'live-region') {
@@ -50,8 +64,9 @@ function BannerAlertHarness({state}: {state: BannerAlertBindingState}) {
           state.endContentLabel == null ? undefined : (
             <Button label={state.endContentLabel} variant="ghost" />
           )
-        }>
-        {state.collapsedContent}
+        }
+        collapsible={collapsibleFor(state)}>
+        {state.supportingContent}
       </Banner>
     </div>
   );

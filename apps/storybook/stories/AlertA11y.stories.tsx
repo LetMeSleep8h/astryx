@@ -31,7 +31,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'Actual Banner states that explicitly request urgent alert semantics. Browser evidence covers role, assertive channel, exposed text, atomicity, and focus preservation; speech and timing remain AST-009 evidence.',
+          'Actual Banner states that explicitly request urgent alert semantics. Browser evidence checks role, assertive channel, exposed text, and focus preservation, and reports atomicity; speech and timing remain AST-009 evidence.',
       },
     },
   },
@@ -45,6 +45,10 @@ export const BannerWarningAlertDismissible = alertStory(
 );
 export const BannerWarningAlertCollapsible = alertStory(
   'banner-warning-alert-collapsible',
+);
+export const BannerWarningAlertOpen = alertStory('banner-warning-alert-open');
+export const BannerWarningAlertAlwaysVisible = alertStory(
+  'banner-warning-alert-always-visible',
 );
 export const BannerErrorAlertEndContent = alertStory(
   'banner-error-alert-end-content',
