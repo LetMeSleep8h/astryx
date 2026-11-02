@@ -14,6 +14,9 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Calendar} from './Calendar';
+import {DateInput} from '../DateInput/DateInput';
+import {DateRangeInput} from '../DateRangeInput/DateRangeInput';
+import {DateTimeInput} from '../DateTimeInput/DateTimeInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
@@ -260,5 +263,49 @@ describe('Calendar year paging in the Gregorian calendar', () => {
     dayButton('2026-06-15').focus();
     await user.keyboard('{Shift>}{PageDown}{/Shift}');
     expect(focusedDate()).toBe('2026-06-15');
+  });
+});
+
+describe('date inputs under a provider calendar', () => {
+  // Their field text is Gregorian, so their popover calendars stay Gregorian.
+  it.each([
+    [
+      'DateInput',
+      <DateInput key="d" label="Date" value="2026-10-30" onChange={() => {}} />,
+    ],
+    [
+      'DateTimeInput',
+      <DateTimeInput
+        key="dt"
+        label="When"
+        value="2026-10-30T09:00"
+        onChange={() => {}}
+      />,
+    ],
+    [
+      'DateRangeInput',
+      <DateRangeInput
+        key="r"
+        label="Dates"
+        value={{start: '2026-10-30', end: '2026-11-02'}}
+        onChange={() => {}}
+      />,
+    ],
+  ])('%s keeps a Gregorian popover calendar', async (_name, field) => {
+    const user = userEvent.setup();
+    render(
+      <InternationalizationProvider locale="en" calendar="persian">
+        {field}
+      </InternationalizationProvider>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Open calendar'}));
+    // The popover is not shown in jsdom, so the grid is read from the DOM.
+    const grid = await waitFor(() => {
+      const element = document.querySelector('[role="grid"]');
+      expect(element).not.toBeNull();
+      return element as HTMLElement;
+    });
+    expect(grid.getAttribute('aria-label')).toContain('2026');
+    expect(grid.getAttribute('aria-label')).not.toContain('1405');
   });
 });
