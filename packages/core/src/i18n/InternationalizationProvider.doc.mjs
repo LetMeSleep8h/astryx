@@ -26,7 +26,7 @@ export const docs = {
         name: 'Provider boundary',
         required: true,
         description:
-          'A nonvisual context boundary that supplies locale, message catalogs, overrides, direction, and calendar system to descendant Astryx components. It renders no DOM element.',
+          'A nonvisual context boundary that supplies locale, message catalogs, overrides, and direction to descendant Astryx components, and a calendar system to `Calendar`. It renders no DOM element.',
       },
     ],
     bestPractices: [
@@ -53,7 +53,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Set `calendar` (or a `-u-ca-` keyword in `locale`, such as `th-TH-u-ca-buddhist`) to show dates in another calendar system. A locale alone never changes the calendar: `fa-IR` shows Gregorian dates until you set `calendar="persian"`. Date values stay Gregorian ISO strings.',
+          'Set `calendar` (or a `-u-ca-` keyword in `locale`, such as `th-TH-u-ca-buddhist`) to show `Calendar` in another calendar system; `DateInput`, `DateRangeInput`, and `DateTimeInput` show Gregorian dates. A locale alone never changes the calendar: `fa-IR` shows Gregorian dates until you set `calendar="persian"`. Date values stay Gregorian ISO strings.',
       },
       {
         guidance: false,
@@ -96,7 +96,7 @@ export const docs = {
       type: 'CalendarSystem',
       required: false,
       description:
-        "Calendar system that date components in the subtree show, such as 'persian', 'hebrew', or 'buddhist'. When omitted, a `-u-ca-` keyword in `locale` selects the calendar, else Gregorian; a locale's default calendar never applies. A component's own `calendar` prop takes precedence. Values stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need `Temporal`; where the runtime lacks it, load a polyfill such as `temporal-polyfill/full/global` on the server and in the browser, or those calendars show Gregorian dates and warn in development.",
+        "Calendar system that `Calendar` in the subtree shows, such as 'persian', 'hebrew', or 'buddhist'. `DateInput`, `DateRangeInput`, and `DateTimeInput` show Gregorian dates. When omitted, a `-u-ca-` keyword in `locale` selects the calendar, else Gregorian; a locale's default calendar never applies. A component's own `calendar` prop takes precedence. Values stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need `Temporal`; where the runtime lacks it, load a polyfill such as `temporal-polyfill/full/global` on the server and in the browser, or those calendars show Gregorian dates and warn in development.",
     },
     {
       name: 'children',
@@ -139,7 +139,7 @@ export function AppI18n({children}: {children: ReactNode}) {
 }`,
     },
     {
-      label: 'Show dates in the Persian calendar',
+      label: 'Show Calendar in the Persian calendar',
       code: `import type {ReactNode} from 'react';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 
@@ -217,6 +217,6 @@ export const docsDense = {
     overrides:
       'sparse per-locale key overrides applied on top of shipped defaults',
     calendar:
-      'calendar system for date components (default: -u-ca- in locale, else gregory); values stay Gregorian ISO; non-Gregorian-aligned calendars need Temporal',
+      'calendar system for Calendar; date inputs stay Gregorian (default: -u-ca- in locale, else gregory); values stay Gregorian ISO; non-Gregorian-aligned calendars need Temporal',
   },
 };
