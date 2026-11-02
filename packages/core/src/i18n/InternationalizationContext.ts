@@ -25,10 +25,16 @@
 import {createContext} from 'react';
 import {getResolve} from './resolve';
 import type {Locale, MessagesByLocale, Overrides} from './types';
+import type {CalendarSystem} from '../utils/calendarSystem';
 
 export interface InternationalizationContextValue {
   locale: Locale;
   direction: 'ltr' | 'rtl';
+  /**
+   * The provider's calendar system for date components. A context without
+   * it shows Gregorian dates.
+   */
+  calendar?: CalendarSystem;
   messages: MessagesByLocale;
   overrides?: Overrides;
   translate: ReturnType<typeof getResolve>;
