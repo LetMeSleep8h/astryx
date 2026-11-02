@@ -108,9 +108,9 @@ export interface InternationalizationProviderProps {
    */
   dir?: 'ltr' | 'rtl';
   /**
-   * The calendar system that `Calendar` in this subtree shows, such as
-   * `'persian'` or `'hebrew'`. The date inputs show Gregorian dates. Values
-   * stay Gregorian ISO dates. When omitted,
+   * The calendar system that `Calendar`, `DateInput`, and `DateTimeInput` in
+   * this subtree show, such as `'persian'` or `'hebrew'`. `DateRangeInput`
+   * shows Gregorian dates. Values stay Gregorian ISO dates. When omitted,
    * a `-u-ca-` keyword in `locale` selects the calendar, else Gregorian; a
    * locale's default calendar never applies. A component's own `calendar`
    * prop takes precedence. Calendars other than `gregory`, `iso8601`,
