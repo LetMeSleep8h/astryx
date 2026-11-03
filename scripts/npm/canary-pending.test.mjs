@@ -18,9 +18,13 @@ describe('canaryPackages', () => {
     const byName = new Map(packages.map(pkg => [pkg.name, pkg]));
 
     expect(byName.get('@astryxdesign/core')).toEqual({
+      dir: 'packages/core',
       name: '@astryxdesign/core',
       privateCanary: false,
     });
+    expect(byName.get('@astryxdesign/theme-neutral')?.dir).toBe(
+      'packages/themes/neutral',
+    );
     expect(byName.get('@astryxdesign/vega')?.privateCanary).toBe(true);
     expect(byName.has('@astryxdesign/theme-probe')).toBe(false);
   });

@@ -41,7 +41,11 @@ function writeExecutable(root, name, contents) {
  * unknown, so nothing is skipped) and no waits between attempts.
  */
 function withPublisher(root) {
-  for (const file of ['publish-package.mjs', 'registry.mjs']) {
+  for (const file of [
+    'canary-pending.mjs',
+    'publish-package.mjs',
+    'registry.mjs',
+  ]) {
     const target = path.join(root, 'scripts/npm', file);
     fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.copyFileSync(path.join(ROOT, 'scripts/npm', file), target);
@@ -333,6 +337,41 @@ describe('stable and canary publication authority', () => {
     const branch = run('refs/heads/feature');
     expect(branch.status).toBe(1);
     expect(branch.stdout).toContain('Canaries publish only from main');
+  });
+
+  it('lets one package list drive the skip check, the stamp and the publish loop', () => {
+    const publish = step(canary, 'Publish canary versions').run;
+    expect(publish).toContain(
+      'CANARY_DIRS=$(node scripts/npm/canary-pending.mjs --list-dirs)',
+    );
+    expect(publish.match(/for pkg_dir in \$CANARY_DIRS; do/gu)).toHaveLength(2);
+    expect(publish).not.toMatch(/for pkg(_dir)? in packages\//u);
+
+    // The list holds exactly the packages the publish loop's own rule admits.
+    const listed = spawnSync(
+      process.execPath,
+      ['scripts/npm/canary-pending.mjs', '--list-dirs'],
+      {cwd: ROOT, encoding: 'utf8'},
+    )
+      .stdout.trim()
+      .split('\n');
+    const admitted = ['packages', 'packages/themes'].flatMap(parent =>
+      fs
+        .readdirSync(path.join(ROOT, parent), {withFileTypes: true})
+        .filter(entry => entry.isDirectory())
+        .map(entry => `${parent}/${entry.name}`)
+        .filter(dir => fs.existsSync(path.join(ROOT, dir, 'package.json')))
+        .filter(dir => {
+          const p = JSON.parse(
+            fs.readFileSync(path.join(ROOT, dir, 'package.json'), 'utf8'),
+          );
+          return (
+            (!p.private || p.astryx?.canaryOnly) &&
+            p.name?.startsWith('@astryxdesign/')
+          );
+        }),
+    );
+    expect([...listed].sort()).toEqual([...admitted].sort());
   });
 
   it('refuses a canary dispatch marked as a dry run, which would still publish', () => {

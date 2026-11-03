@@ -371,7 +371,11 @@ jobs:
           # packages (for example Native) stay `private: true` in git as npm's hard
           # guarantee against a stable publish; here — in the ephemeral CI
           # checkout ONLY — we strip `private` so they publish to @canary.
-          for pkg in packages/*/package.json packages/themes/*/package.json; do
+          # One list of the packages this job publishes drives the stamp, the
+          # publish loop and the skip check above.
+          CANARY_DIRS=$(node scripts/npm/canary-pending.mjs --list-dirs)
+          for pkg_dir in $CANARY_DIRS; do
+            pkg="$pkg_dir/package.json"
             node -e "
               const fs = require('fs');
               const p = JSON.parse(fs.readFileSync('$pkg','utf8'));
@@ -401,7 +405,7 @@ jobs:
           # their canaries. Publishes are per-package and idempotent, so attempting
           # the rest is always safe.
           FAILED=""
-          for pkg_dir in packages/* packages/themes/*; do
+          for pkg_dir in $CANARY_DIRS; do
             [ -f "$pkg_dir/package.json" ] || continue
             # canaryOnly packages are publishable here (the stamp step above
             # already stripped their `private` flag in this ephemeral checkout).

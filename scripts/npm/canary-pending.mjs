@@ -4,7 +4,8 @@
 /**
  * @file Decide whether main's tip still needs canaries: which packages the
  *   canary loop would publish that the registry does not have yet.
- * @input `--version <canary version>`; the package manifests under
+ * @input `--version <canary version>`, or `--list-dirs` to print the package
+ *   directories the canary job publishes, one per line; the package manifests under
  *   `packages/` and `packages/themes/`. `ASTRYX_PUBLISH_REGISTRY` overrides
  *   the registry for tests.
  * @output Prints each pending package; writes `pending=<count>` to
@@ -13,6 +14,8 @@
  * @position The canary job in .github/workflows/release.yml runs it before it
  *   builds anything, so an hourly run at a tip whose canaries are all
  *   published stops early, and a tip with any package missing publishes again.
+ *   The job's stamp and publish loops walk `--list-dirs`, so the check and the
+ *   loops always mean the same packages.
  */
 
 import fs from 'node:fs';
@@ -31,21 +34,27 @@ export function canaryPackages(root) {
     fs
       .readdirSync(path.join(root, parent), {withFileTypes: true})
       .filter(entry => entry.isDirectory())
-      .map(entry => path.join(root, parent, entry.name, 'package.json')),
+      .map(entry => `${parent}/${entry.name}`)
+      .sort(),
   );
   return dirs
-    .filter(file => fs.existsSync(file))
-    .map(file => JSON.parse(fs.readFileSync(file, 'utf8')))
+    .filter(dir => fs.existsSync(path.join(root, dir, 'package.json')))
+    .map(dir => ({
+      dir,
+      manifest: JSON.parse(
+        fs.readFileSync(path.join(root, dir, 'package.json'), 'utf8'),
+      ),
+    }))
     .filter(
-      manifest =>
+      ({manifest}) =>
         manifest.name?.startsWith('@astryxdesign/') &&
         (!manifest.private || manifest.astryx?.canaryOnly),
     )
-    .map(manifest => ({
+    .map(({dir, manifest}) => ({
+      dir,
       name: manifest.name,
       privateCanary: Boolean(manifest.private),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    }));
 }
 
 /**
@@ -70,6 +79,10 @@ export async function pendingPackages({
 }
 
 async function main() {
+  if (process.argv.includes('--list-dirs')) {
+    for (const pkg of canaryPackages(process.cwd())) console.log(pkg.dir);
+    return;
+  }
   const flag = process.argv.indexOf('--version');
   const version = flag > 0 ? process.argv[flag + 1] : undefined;
   if (!version) throw new Error('--version is required');
