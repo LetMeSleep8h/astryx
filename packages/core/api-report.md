@@ -2320,6 +2320,7 @@ component Table
   prop scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   prop textOverflow?: 'wrap' | 'truncate' = 'wrap'
   prop verticalAlign?: TableVerticalAlign = 'middle'
+  prop virtualization?: BaseTableProps<T>['virtualization']
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TableBody(props: TableBodyProps)
@@ -2946,6 +2947,7 @@ hook useTablePagination: <T extends Record<string, unknown>>(config: UseTablePag
 hook useTableRowExpansion: <T extends Record<string, unknown>>(config: UseTableRowExpansionConfig<T>) => TablePlugin<T>
 hook useTableRowIndex: <T extends Record<string, unknown>>(config: UseTableRowIndexConfig<T>) => TablePlugin<T>
 hook useTableRowStatus: <T extends Record<string, unknown>>(config: UseTableRowStatusConfig<T>) => TablePlugin<T>
+hook useTableRowsVirtualization: ({…}: UseTableRowsVirtualizationConfig) => TableVirtualizationCapability
 hook useTableSelection: <T extends Record<string, unknown>>(config: UseTableSelectionConfig<T>) => TablePlugin<T>
 hook useTableSelectionState: <T extends Record<string, unknown>>(config: UseTableSelectionStateConfig<T>) => UseTableSelectionStateResult<T>
 hook useTableSortable: <T extends Record<string, unknown>, TSortKey extends string = string>(config: UseTableSortableConfig<TSortKey>) => TablePlugin<T>
@@ -3580,6 +3582,7 @@ interface BaseTableProps<T extends Record<string, unknown>> extends BaseProps<HT
   rowIndexStart?: number = 1
   scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
+  virtualization?: TableVirtualizationCapability
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of BaseTypeahead)
@@ -5387,15 +5390,16 @@ interface TableFooterProps extends BaseProps<HTMLTableSectionElement> (props of 
 interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> (props of TableHeaderCell)
 interface TableHeaderProps extends BaseProps<HTMLTableSectionElement> (props of TableHeader)
 interface TablePlugin<T extends Record<string, unknown> = Record<string, unknown>>
-  transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>) => BodyCellRenderProps
-  transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number) => BodyRowRenderProps
+  rowModel?: TableRenderContext['rowModel']
+  transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>, context?: TableRowContext) => BodyCellRenderProps
+  transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number, context?: TableRowContext) => BodyRowRenderProps
   transformColumns?: (columns: TableColumn<T>[]) => TableColumn<T>[]
   transformHeaderCell?: (props: HeaderCellRenderProps, column: TableColumn<T>, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>) => HeaderCellRenderProps
   transformHeaderRow?: (props: HeaderRowRenderProps) => HeaderRowRenderProps
-  transformScrollWrapper?: (props: ScrollWrapperRenderProps) => ScrollWrapperRenderProps
+  transformScrollWrapper?: (props: ScrollWrapperRenderProps, context?: TableRenderContext) => ScrollWrapperRenderProps
   transformTable?: (props: TableRenderProps) => TableRenderProps
   transformTableContext?: (children: ReactNode) => ReactNode
-interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTableProps<T>, 'plugins' | 'components'>
+interface TableProps<T extends Record<string, unknown>> extends TableAppearanceProps<T>
   children?: ReactNode
   columns?: TableColumn<T>[]
   data?: T[]
@@ -5412,11 +5416,26 @@ interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTablePr
   scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
   verticalAlign?: TableVerticalAlign = 'middle'
+  virtualization?: BaseTableProps<T>['virtualization']
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface TableRenderContext
+  headerRowCount: number
+  logicalRowCount: number
+  mode: 'data' | 'children'
+  rowModel: 'flat' | 'tree' | 'grouped' | 'detail' | 'custom'
+  viewport: RefObject<HTMLDivElement | null>
 interface TableRenderProps
   htmlProps: HTMLAttributes<HTMLTableElement>
   xstyle: StyleXStyles[]
+interface TableRowContext
+  headerRowCount: number
+  identityStatus: 'valid' | 'missing' | 'invalid' | 'duplicate'
+  key: string | number | undefined
+  kind: 'product' | 'synthetic' | 'unknown'
+  logicalIndex: number
+  logicalRowCount: number
+  render: TableRenderContext
 interface TableRowProps extends BaseProps<HTMLTableRowElement> (props of TableRow)
 interface TableRowStatus
   color: TableRowStatusColor | (string & {})
@@ -5448,6 +5467,8 @@ interface TableTreeRowMeta
   isExpanded: boolean
   level: number
 type TableVerticalAlign = 'middle' | 'top' | 'bottom'
+interface TableVirtualizationCapability
+  [capabilityBrand]: Readonly<UseTableRowsVirtualizationConfig>
 interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextArea)
 type TextAreaSize = 'sm' | 'md' | 'lg'
 interface TextAreaStatus
@@ -6151,6 +6172,9 @@ interface UseTableRowIndexConfig<T extends Record<string, unknown>>
   startFrom?: number = 1
 interface UseTableRowStatusConfig<T extends Record<string, unknown>>
   getStatus: (item: T) => (TableRowStatus & { status?: never }) | TableSemanticRowStatus | null
+interface UseTableRowsVirtualizationConfig
+  rowHeight: number
+  viewportHeight: number
 interface UseTableSelectionConfig<T extends Record<string, unknown>>
   getIsAllSelected: () => boolean
   getIsIndeterminate?: () => boolean
@@ -8618,8 +8642,10 @@ TableHeaderCellProps (.)
 TableHeaderProps (.)
 TablePlugin (.)
 TableProps (.)
+TableRenderContext (.)
 TableRenderProps (.)
 TableRow (.)
+TableRowContext (.)
 TableRowProps (.)
 TableRowStatus (.)
 TableSelectionState (.)
@@ -8634,6 +8660,7 @@ TableSortableColumnConfig (.)
 TableTextOverflow (.)
 TableTreeRowMeta (.)
 TableVerticalAlign (.)
+TableVirtualizationCapability (.)
 UseTableColumnResizeConfig (.)
 UseTableColumnSettingsConfig (.)
 UseTableColumnSettingsStateConfig (.)
@@ -8645,6 +8672,7 @@ UseTablePaginationConfig (.)
 UseTableRowExpansionConfig (.)
 UseTableRowIndexConfig (.)
 UseTableRowStatusConfig (.)
+UseTableRowsVirtualizationConfig (.)
 UseTableSelectionConfig (.)
 UseTableSelectionStateConfig (.)
 UseTableSelectionStateResult (.)
@@ -8673,6 +8701,7 @@ useTablePagination (.)
 useTableRowExpansion (.)
 useTableRowIndex (.)
 useTableRowStatus (.)
+useTableRowsVirtualization (.)
 useTableSelection (.)
 useTableSelectionState (.)
 useTableSortable (.)

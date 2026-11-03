@@ -23,6 +23,8 @@ import {
   type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
+
 import {colorVars, durationVars, easeVars} from '../../../theme/tokens.stylex';
 import type {
   TableColumn,
@@ -607,7 +609,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     refreshRef.current?.();
   });
 
-  return useMemo(
+  const plugin = useMemo(
     (): TablePlugin<T> => ({
       transformTableContext(children: ReactNode): ReactNode {
         return (
@@ -617,6 +619,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
           </>
         );
       },
+      rowModel: 'flat',
       transformHeaderCell(
         props: HeaderCellRenderProps,
         column: TableColumn<T>,
@@ -729,4 +732,5 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     // computed once and reused across renders.
     [attachScrollShadow],
   );
+  return registerCountIndependentPlugin(plugin);
 }

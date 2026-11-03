@@ -490,6 +490,7 @@
     "/templates/RadioListWithValidation/",
     "/templates/ResizableShowcase/",
     "/templates/ResizableSidebar/",
+    "/templates/RowsVirtualizationHookUsage/",
     "/templates/ScrollableAreaInlineRail/",
     "/templates/ScrollableAreaOverscrollChaining/",
     "/templates/ScrollableAreaShowcase/",
