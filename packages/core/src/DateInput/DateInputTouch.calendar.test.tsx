@@ -287,6 +287,14 @@ describe('the bottom sheet in a calendar', () => {
     const years = wheelOptions('Year').map(option => option.textContent);
     expect(years).toContain('令和8');
     expect(years).toContain('平成30');
+    // A year with an era change names both era years, so the row says both.
+    expect(years).toContain('平成31 / 令和元');
+    expect(years).toContain('令和2');
+    expect(
+      within(screen.getByRole('listbox', {name: 'Year'})).getByRole('option', {
+        name: '平成31 / 令和元',
+      }),
+    ).toBeInTheDocument();
     expect(wheelOptions('Month')[10]).toHaveTextContent('11月');
   });
 

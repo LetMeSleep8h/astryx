@@ -15,6 +15,7 @@ import {
   calendarShiftYears,
   formatCalendarDate,
   formatCalendarMonthLabel,
+  formatCalendarYearLabel,
   formatDayNumber,
   isCalendarSystemAvailable,
   isGregorianAligned,
@@ -352,5 +353,39 @@ describe('dates from calendar fields', () => {
     expect(calendarMonthsInYear('hebrew', iso('2024-02-10'))).toBe(13);
     expect(calendarMonthsInYear('hebrew', iso('2025-03-01'))).toBe(12);
     expect(calendarMonthsInYear('gregory', iso('2025-03-01'))).toBe(12);
+  });
+});
+
+describe('formatCalendarYearLabel', () => {
+  it.each([
+    [2020, '令和2'],
+    [2019, '平成31 / 令和元'],
+    [1989, '昭和64 / 平成元'],
+    [1926, '大正15 / 昭和元'],
+    [1912, '明治45 / 大正元'],
+  ])('labels Japanese year %i as %s', (year, label) => {
+    expect(formatCalendarYearLabel('japanese', year, 'ja-JP')).toBe(label);
+  });
+
+  it('labels 1868 with the era Intl gives before Meiji, then Meiji', () => {
+    expect(formatCalendarYearLabel('japanese', 1868, 'ja-JP')).toMatch(
+      / \/ 明治元$/,
+    );
+  });
+
+  it('writes both era years in the locale order', () => {
+    expect(formatCalendarYearLabel('japanese', 2019, 'en')).toBe(
+      '31 Heisei / 1 Reiwa',
+    );
+  });
+
+  it('does not split a year without an era change', () => {
+    expect(formatCalendarYearLabel('persian', 1405, 'en')).toBe('1405 AP');
+    expect(formatCalendarYearLabel('roc', 1912, 'zh-TW')).toBe('民國1');
+    expect(formatCalendarYearLabel('buddhist', 2026, 'th-TH')).toBe(
+      'พ.ศ. 2569',
+    );
+    expect(formatCalendarYearLabel('chinese', 2027, 'zh')).toBe('2027');
+    expect(formatCalendarYearLabel('gregory', 2026, 'en')).toBe('2026');
   });
 });

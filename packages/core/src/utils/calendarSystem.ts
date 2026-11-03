@@ -570,12 +570,46 @@ const YEAR_PART_TYPES: ReadonlySet<string> = new Set([
   'relatedYear',
 ]);
 
+/** The era and year parts of a date, as the locale writes them in a long date. */
+function eraYearAt(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  locale: Locale,
+): {readonly era: string | undefined; readonly label: string | null} {
+  const parts = formatToParts(
+    calendar,
+    pd,
+    {era: 'short', year: 'numeric', month: 'long', day: 'numeric'},
+    locale,
+  );
+  const era = parts.find(part => part.type === 'era')?.value;
+  const first = parts.findIndex(part => YEAR_PART_TYPES.has(part.type));
+  if (first === -1) {
+    return {era, label: null};
+  }
+  let last = first;
+  parts.forEach((part, index) => {
+    if (YEAR_PART_TYPES.has(part.type)) {
+      last = index;
+    }
+  });
+  const label = parts
+    .slice(first, last + 1)
+    .filter(part => YEAR_PART_TYPES.has(part.type) || part.type === 'literal')
+    .map(part => part.value)
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return {era, label};
+}
+
 /**
  * The label of a year of the calendar, with its era where the locale writes
  * one in a date, such as "令和8" in `ja-JP` or "1405 AP" in English. It uses the
- * era and year parts of a long date in the middle of the year, in the locale's
- * order and digits, with the text between them. Gregorian years are plain
- * numbers.
+ * era and year parts of a long date, in the locale's order and digits, with the
+ * text between them. A year whose first and last days fall in different eras
+ * names both era years in order, such as "平成31 / 令和元"; any other year uses
+ * its middle day. Gregorian years are plain numbers.
  */
 export function formatCalendarYearLabel(
   calendar: CalendarSystem,
@@ -586,32 +620,26 @@ export function formatCalendarYearLabel(
     return String(year);
   }
   const months = calendarMonthsInCalendarYear(calendar, year);
-  const middle = calendarMonthOfYear(
+  const start = eraYearAt(
     calendar,
-    year,
-    Math.floor(months / 2) + 1,
-  ).start;
-  const parts = formatToParts(
-    calendar,
-    middle,
-    {era: 'short', year: 'numeric', month: 'long', day: 'numeric'},
+    calendarMonthOfYear(calendar, year, 1).start,
     locale,
   );
-  const first = parts.findIndex(part => YEAR_PART_TYPES.has(part.type));
-  if (first === -1) {
-    return String(year);
+  const end = eraYearAt(
+    calendar,
+    calendarMonthOfYear(calendar, year, months).end,
+    locale,
+  );
+  // Only an era change splits a year. Other parts, such as a Chinese related
+  // year, can disagree at the edges of a year when Intl and Temporal place a
+  // month start one day apart.
+  if (start.era !== end.era && start.label != null && end.label != null) {
+    return `${start.label} / ${end.label}`;
   }
-  let last = first;
-  parts.forEach((part, index) => {
-    if (YEAR_PART_TYPES.has(part.type)) {
-      last = index;
-    }
-  });
-  return parts
-    .slice(first, last + 1)
-    .filter(part => YEAR_PART_TYPES.has(part.type) || part.type === 'literal')
-    .map(part => part.value)
-    .join('')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const middle = eraYearAt(
+    calendar,
+    calendarMonthOfYear(calendar, year, Math.floor(months / 2) + 1).start,
+    locale,
+  );
+  return middle.label ?? String(year);
 }
