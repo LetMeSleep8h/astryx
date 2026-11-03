@@ -106,7 +106,7 @@ function runCanaryPublish({
           CURL_EXIT_CODE: curlExitCode,
           FAIL_ONCE: failOnce,
           FAIL_PACKAGE: failingPackage,
-          GITHUB_SHA: 'abcdef1234567890',
+          CANARY_VERSION: '0.7.4-canary.abcdef1',
           NATIVE_HTTP_STATUS: httpStatus,
           PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
           PUBLISH_LOG: publishLog,
@@ -186,11 +186,12 @@ const STABLE_INPUTS = [
 ];
 
 /*
- * Runs the canary's "already has its canary" step against a local registry
- * stand-in that answers every request with `status` (`000` drops the
- * connection), and returns the step's `publish=` output.
+ * Runs the canary's "canaries all published" step against a local registry
+ * stand-in. `answers` maps a request path to its status (`000` drops the
+ * connection); any other path answers 404. The scratch root holds a public
+ * Core and a private canary-only Native. Returns the step's `publish=` output.
  */
-async function runFreshCheck(status) {
+async function runFreshCheck(answers) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-canary-fresh-'));
   const server = spawn(
     process.execPath,
@@ -198,13 +199,14 @@ async function runFreshCheck(status) {
       '--input-type=module',
       '-e',
       `import http from 'node:http';
-const status = process.argv[1];
+const answers = JSON.parse(process.argv[1]);
 const server = http.createServer((request, response) => {
+  const status = answers[decodeURIComponent(request.url)] ?? '404';
   if (status === '000') return request.socket.destroy();
   response.writeHead(Number(status)).end('{}');
 });
 server.listen(0, '127.0.0.1', () => console.log(server.address().port));`,
-      status,
+      JSON.stringify(answers),
     ],
     {stdio: ['ignore', 'pipe', 'inherit']},
   );
@@ -217,14 +219,27 @@ server.listen(0, '127.0.0.1', () => console.log(server.address().port));`,
       name: '@astryxdesign/core',
       version: '0.7.8',
     });
-    const registryFile = path.join(root, 'scripts/npm/registry.mjs');
-    fs.mkdirSync(path.dirname(registryFile), {recursive: true});
-    fs.copyFileSync(path.join(ROOT, 'scripts/npm/registry.mjs'), registryFile);
+    writeJson(root, 'packages/native/package.json', {
+      name: '@astryxdesign/native',
+      version: '0.7.8',
+      private: true,
+      astryx: {canaryOnly: true},
+    });
+    fs.mkdirSync(path.join(root, 'packages/themes'), {recursive: true});
+    for (const file of [
+      'canary-pending.mjs',
+      'publish-package.mjs',
+      'registry.mjs',
+    ]) {
+      const target = path.join(root, 'scripts/npm', file);
+      fs.mkdirSync(path.dirname(target), {recursive: true});
+      fs.copyFileSync(path.join(ROOT, 'scripts/npm', file), target);
+    }
     const githubOutput = path.join(root, 'github-output');
     fs.writeFileSync(githubOutput, '');
     const result = spawnSync(
       'bash',
-      ['-c', step(canary, 'Skip a tip that already has its canary').run],
+      ['-c', step(canary, 'Skip a tip whose canaries are all published').run],
       {
         cwd: root,
         encoding: 'utf8',
@@ -237,12 +252,18 @@ server.listen(0, '127.0.0.1', () => console.log(server.address().port));`,
       },
     );
     expect(result.status).toBe(0);
-    return fs.readFileSync(githubOutput, 'utf8').trim();
+    const output = fs.readFileSync(githubOutput, 'utf8');
+    expect(output).toContain('version=0.7.8-canary.abcdef1');
+    return output.match(/^publish=\w+$/mu)[0];
   } finally {
     server.kill();
     fs.rmSync(root, {recursive: true, force: true});
   }
 }
+
+const CORE_CANARY = '/@astryxdesign/core/0.7.8-canary.abcdef1';
+const NATIVE_CANARY = '/@astryxdesign/native/0.7.8-canary.abcdef1';
+const NATIVE_LATEST = '/@astryxdesign/native/latest';
 
 describe('stable and canary publication authority', () => {
   it('keeps stable explicit and runs canaries hourly or on demand, never on each push', () => {
@@ -294,13 +315,19 @@ describe('stable and canary publication authority', () => {
   });
 
   it('publishes canaries only from main', () => {
-    const run = ref =>
-      spawnSync('bash', ['-c', step(canary, 'Require main').run], {
-        encoding: 'utf8',
-        env: {...process.env, GITHUB_REF: ref},
-      });
+    const run = (ref, dryRun = 'false') =>
+      spawnSync(
+        'bash',
+        ['-c', step(canary, 'Require main and no dry run').run],
+        {
+          encoding: 'utf8',
+          env: {...process.env, GITHUB_REF: ref, DRY_RUN: dryRun},
+        },
+      );
     expect(
-      canary.steps.map(candidate => candidate.name).indexOf('Require main'),
+      canary.steps
+        .map(candidate => candidate.name)
+        .indexOf('Require main and no dry run'),
     ).toBe(1);
     expect(run('refs/heads/main').status).toBe(0);
     const branch = run('refs/heads/feature');
@@ -308,11 +335,47 @@ describe('stable and canary publication authority', () => {
     expect(branch.stdout).toContain('Canaries publish only from main');
   });
 
-  it("publishes nothing when main's tip already has its canary, and publishes on any other answer", async () => {
-    expect(await runFreshCheck('200')).toBe('publish=false');
-    expect(await runFreshCheck('404')).toBe('publish=true');
-    expect(await runFreshCheck('503')).toBe('publish=true');
-    expect(await runFreshCheck('000')).toBe('publish=true');
+  it('refuses a canary dispatch marked as a dry run, which would still publish', () => {
+    const result = spawnSync(
+      'bash',
+      ['-c', step(canary, 'Require main and no dry run').run],
+      {
+        encoding: 'utf8',
+        env: {...process.env, GITHUB_REF: 'refs/heads/main', DRY_RUN: 'true'},
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'A canary dispatch publishes; it has no dry run.',
+    );
+    expect(step(canary, 'Require main and no dry run').env.DRY_RUN).toBe(
+      '${{ inputs.dry-run }}',
+    );
+  });
+
+  it("publishes nothing only when every package already has this tip's canary", async () => {
+    expect(
+      await runFreshCheck({[CORE_CANARY]: '200', [NATIVE_CANARY]: '200'}),
+    ).toBe('publish=false');
+    // Core landed but a later package did not: publish again.
+    expect(
+      await runFreshCheck({[CORE_CANARY]: '200', [NATIVE_LATEST]: '200'}),
+    ).toBe('publish=true');
+    // A private canary-only package whose npm name does not exist is skipped
+    // by the loop, so it does not keep the tip pending.
+    expect(await runFreshCheck({[CORE_CANARY]: '200'})).toBe('publish=false');
+  });
+
+  it('publishes on any answer the registry cannot give', async () => {
+    expect(
+      await runFreshCheck({[CORE_CANARY]: '503', [NATIVE_CANARY]: '200'}),
+    ).toBe('publish=true');
+    expect(
+      await runFreshCheck({[CORE_CANARY]: '000', [NATIVE_CANARY]: '200'}),
+    ).toBe('publish=true');
+    expect(
+      await runFreshCheck({[CORE_CANARY]: '200', [NATIVE_LATEST]: '401'}),
+    ).toBe('publish=true');
   });
 
   it('binds stable publication to marker, tag, branch, head, version, and plan', () => {
@@ -407,14 +470,20 @@ describe('stable and canary publication authority', () => {
         "steps.fresh.outputs.publish == 'true'",
       );
     }
-    expect(step(canary, 'Skip a tip that already has its canary').if).toBe(
+    expect(step(canary, 'Skip a tip whose canaries are all published').if).toBe(
       "steps.canary-scope.outputs.publish == 'true'",
     );
-    const publish = step(canary, 'Publish canary versions').run;
-    expect(publish).toContain(
-      'DECLARED_VERSION=$(node -p "require(\'./packages/core/package.json\').version")',
+    // The canary version is computed once and handed to the publish step.
+    const fresh = step(canary, 'Skip a tip whose canaries are all published');
+    expect(fresh.run).toContain(
+      'CANARY_VERSION="$(node -p "require(\'./packages/core/package.json\').version")-canary.${GITHUB_SHA:0:7}"',
     );
-    expect(publish).toContain('CANARY_VERSION="${DECLARED_VERSION}-canary.');
+    expect(fresh.run).toContain('echo "version=${CANARY_VERSION}"');
+    expect(step(canary, 'Publish canary versions').env.CANARY_VERSION).toBe(
+      '${{ steps.fresh.outputs.version }}',
+    );
+    const publish = step(canary, 'Publish canary versions').run;
+    expect(publish).not.toContain('GITHUB_SHA');
     expect(publish).toContain('--tag canary');
     expect(publish).not.toContain('--tag latest');
     const canaryText = JSON.stringify(canary);

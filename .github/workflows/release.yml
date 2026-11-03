@@ -296,11 +296,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require main
+      - name: Require main and no dry run
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
         run: |
           set -eu
           if [ "$GITHUB_REF" != "refs/heads/main" ]; then
             echo "::error::Canaries publish only from main, not $GITHUB_REF."
+            exit 1
+          fi
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "::error::A canary dispatch publishes; it has no dry run."
             exit 1
           fi
 
@@ -311,30 +317,19 @@ jobs:
           git fetch origin 'refs/tags/v*:refs/tags/v*'
           node scripts/release/active-release.mjs canary-eligibility
 
-      # The hourly run publishes nothing when main's tip already has its
-      # canary (main has not moved since the last one). An unknown answer
-      # publishes: the per-package publisher skips versions already there.
-      - name: Skip a tip that already has its canary
+      # The hourly run publishes nothing when every package the loop would
+      # publish already has this tip's canary. A package still missing, or a
+      # read the registry cannot answer, publishes; the per-package publisher
+      # skips versions already there.
+      - name: Skip a tip whose canaries are all published
         if: steps.canary-scope.outputs.publish == 'true'
         id: fresh
         run: |
           set -eu
           CANARY_VERSION="$(node -p "require('./packages/core/package.json').version")-canary.${GITHUB_SHA:0:7}"
-          STATUS=$(node --input-type=module -e "
-            import {fetchVersionDocument} from './scripts/npm/registry.mjs';
-            try {
-              const response = await fetchVersionDocument({
-                name: '@astryxdesign/core',
-                version: process.argv[1],
-                registry: process.env.ASTRYX_PUBLISH_REGISTRY || undefined,
-              });
-              process.stdout.write(String(response.status));
-            } catch {
-              process.stdout.write('000');
-            }
-          " "$CANARY_VERSION")
-          if [ "$STATUS" = "200" ]; then
-            echo "@astryxdesign/core@${CANARY_VERSION} is already on the registry; nothing to publish."
+          echo "version=${CANARY_VERSION}" >> "$GITHUB_OUTPUT"
+          node scripts/npm/canary-pending.mjs --version "$CANARY_VERSION"
+          if grep -qx 'pending=0' "$GITHUB_OUTPUT"; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -355,13 +350,13 @@ jobs:
 
       - name: Publish canary versions
         if: steps.fresh.outputs.publish == 'true'
-        # Pure OIDC trusted publishing — no NPM_TOKEN.
+        # Pure OIDC trusted publishing — no NPM_TOKEN. The canary version is
+        # main's declared next version plus this commit, computed once above.
+        env:
+          CANARY_VERSION: ${{ steps.fresh.outputs.version }}
         run: |
           set -eu
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          # Main's package.json carries the next planned version.
-          DECLARED_VERSION=$(node -p "require('./packages/core/package.json').version")
-          CANARY_VERSION="${DECLARED_VERSION}-canary.${SHORT_SHA}"
+          [ -n "$CANARY_VERSION" ] || { echo "::error::No canary version was computed."; exit 1; }
 
           echo "Publishing canary ${CANARY_VERSION}"
 
