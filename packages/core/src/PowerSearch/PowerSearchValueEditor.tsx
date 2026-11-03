@@ -16,6 +16,7 @@ import React, {
   useCallback,
   useMemo,
   useRef,
+  useState,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
@@ -29,6 +30,8 @@ import type {
 import type {InternalConfig} from './useInternalConfig';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 import type {ISODateString} from '../utils/dateTypes';
+import type {ISODateTimeString} from '../DateTimeInput/DateTimeInput';
+import {HStack} from '../HStack/HStack';
 import type {ISOTimeString} from '../utils';
 
 // Lazy import to avoid circular deps — these are all from the same package
@@ -40,6 +43,11 @@ import {
 } from '../NumberInput/numberInputCommit';
 import {DateInput} from '../DateInput';
 import {DateRangeInput, type DateRange} from '../DateRangeInput';
+import {
+  isoDateTimeToUnixSeconds,
+  resolveDateTimeZone,
+  unixSecondsToISODateTime,
+} from './powerSearchDateZone';
 import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
 import {TimeInput} from '../TimeInput';
 import {Selector} from '../Selector';
@@ -410,17 +418,94 @@ function TimeEditor({
   );
 }
 
+/**
+ * A value with a time of day: its wall-clock time in `zone`, read and written
+ * as one instant. A date picker and a time field side by side — DateTimeInput
+ * carries the gesture core, which PowerSearch's bundle keeps out.
+ */
+function DateTimeEditor({
+  label,
+  isDisabled,
+  unixSeconds,
+  zone,
+  onChange,
+}: {
+  label: string;
+  isDisabled?: boolean;
+  unixSeconds: number | undefined;
+  zone: string | undefined;
+  onChange: (value: FilterValue) => void;
+}) {
+  const t = useComponentTranslator();
+  const [datePart, timePart] = useMemo(() => {
+    if (unixSeconds == null) {
+      return [undefined, undefined] as const;
+    }
+    const [date, time] = unixSecondsToISODateTime(unixSeconds, zone).split('T');
+    return [date as ISODateString, time as ISOTimeString] as const;
+  }, [unixSeconds, zone]);
+  // A part picked before the other exists waits for it; the instant is
+  // written once both are known.
+  const [pendingDate, setPendingDate] = useState<ISODateString | undefined>();
+  const [pendingTime, setPendingTime] = useState<ISOTimeString | undefined>();
+  const date = datePart ?? pendingDate;
+  const time = timePart ?? pendingTime;
+  const commit = (
+    nextDate: ISODateString | undefined,
+    nextTime: ISOTimeString | undefined,
+  ) => {
+    if (nextDate == null || nextTime == null) {
+      return;
+    }
+    onChange({
+      type: 'date_absolute',
+      unixSeconds: isoDateTimeToUnixSeconds(
+        `${nextDate}T${nextTime}` as ISODateTimeString,
+        zone,
+      ),
+    });
+  };
+  return (
+    <HStack gap={2}>
+      <DateInput
+        label={label}
+        isLabelHidden
+        isDisabled={isDisabled}
+        value={date}
+        onChange={value => {
+          setPendingDate(value);
+          commit(value, time);
+        }}
+      />
+      <TimeInput
+        label={t('@astryx.powersearch.valueEditor.time')}
+        isLabelHidden
+        isDisabled={isDisabled}
+        value={time}
+        onChange={value => {
+          setPendingTime(value);
+          commit(date, value);
+        }}
+      />
+    </HStack>
+  );
+}
+
 function DateAbsoluteEditor({
+  operatorValue,
   filterValue,
   onChange,
   isDisabled,
+  timezoneID,
 }: {
   operatorValue: OperatorValue & {type: 'date_absolute'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
   isDisabled?: boolean;
+  timezoneID?: string;
 }) {
   const t = useComponentTranslator();
+  const label = t('@astryx.powersearch.valueEditor.date');
   // Convert unixSeconds to ISO date string for the date input
   const currentValue = useMemo(() => {
     if (filterValue?.type !== 'date_absolute') {
@@ -430,9 +515,25 @@ function DateAbsoluteEditor({
     return date.toISOString().split('T')[0] as ISODateString;
   }, [filterValue]);
 
+  if (operatorValue.isDateOnly === false) {
+    return (
+      <DateTimeEditor
+        label={label}
+        isDisabled={isDisabled}
+        unixSeconds={
+          filterValue?.type === 'date_absolute'
+            ? filterValue.unixSeconds
+            : undefined
+        }
+        zone={resolveDateTimeZone(timezoneID)}
+        onChange={onChange}
+      />
+    );
+  }
+
   return (
     <DateInput
-      label={t('@astryx.powersearch.valueEditor.date')}
+      label={label}
       isLabelHidden
       isDisabled={isDisabled}
       value={currentValue}
@@ -771,6 +872,7 @@ export function PowerSearchValueEditor({
   onEnter,
   maxMenuItems,
   isDisabled,
+  timezoneID,
 }: PowerSearchValueEditorProps) {
   switch (operatorValue.type) {
     case 'empty':
@@ -838,6 +940,7 @@ export function PowerSearchValueEditor({
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
+          timezoneID={timezoneID}
         />
       );
 

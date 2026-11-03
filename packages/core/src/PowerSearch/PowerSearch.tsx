@@ -54,8 +54,10 @@ import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
 import {
   formatFilterValue,
+  formatDateAbsolute,
   formatDateAbsoluteCompact,
 } from './formatFilterValue';
+import {resolveDateTimeZone} from './powerSearchDateZone';
 import {PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {themeProps} from '../utils/themeProps';
@@ -163,11 +165,13 @@ function PowerSearchTokenValue({
   filterValue,
   maxLength,
   locale,
+  timezoneID,
 }: {
   operatorValue: OperatorValue;
   filterValue: FilterValue;
   maxLength: number;
   locale: Locale;
+  timezoneID: string | undefined;
 }) {
   switch (filterValue.type) {
     case 'empty':
@@ -309,10 +313,17 @@ function PowerSearchTokenValue({
       );
 
     case 'date_absolute': {
-      const formatted = formatDateAbsoluteCompact(
-        filterValue.unixSeconds,
-        locale,
-      );
+      // A value with a time of day shows it, in the zone its editor uses; a
+      // calendar day shows the day alone.
+      const formatted =
+        operatorValue.type === 'date_absolute' &&
+        operatorValue.isDateOnly === false
+          ? formatDateAbsolute(
+              filterValue.unixSeconds,
+              locale,
+              resolveDateTimeZone(timezoneID),
+            )
+          : formatDateAbsoluteCompact(filterValue.unixSeconds, locale);
       return (
         <span {...stylex.props(tokenValueStyles.value)}>
           {truncateString(formatted, maxLength)}
@@ -910,6 +921,7 @@ export function PowerSearch({
             filterValue={filter.value}
             maxLength={adjustedMaxLength}
             locale={locale}
+            timezoneID={timezoneID}
           />
         ) : undefined;
 
@@ -953,6 +965,7 @@ export function PowerSearch({
       );
     },
     [
+      timezoneID,
       filters,
       config,
       configProp,
@@ -1040,6 +1053,7 @@ export function PowerSearch({
           onCancel={handlePopoverCancel}
           saveButtonLabel={popoverSaveButtonLabel}
           isReadOnly={isReadOnly}
+          timezoneID={timezoneID}
         />
       );
     }
@@ -1055,9 +1069,11 @@ export function PowerSearch({
         saveButtonLabel={popoverSaveButtonLabel}
         maxMenuItems={maxOperatorMenuItems}
         isReadOnly={isReadOnly}
+        timezoneID={timezoneID}
       />
     );
   }, [
+    timezoneID,
     popoverPartialFilter,
     popoverState,
     EditorOverride,
